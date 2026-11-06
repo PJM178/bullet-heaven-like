@@ -24,7 +24,7 @@ import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BLEND_PATH = os.path.join(ROOT, "art", "player.blend")
@@ -260,6 +260,183 @@ def make_armature():
     return arm_obj, names
 
 
+# =========================================================================
+# Animation
+# =========================================================================
+#
+# A pose is a dict: bone name -> list of (axis, degrees) rotations, applied
+# in order around the *armature's* axes (X = character's left/right axis,
+# Y = back/front, Z = up). Thinking in armature axes is much easier than in
+# each bone's own local axes, and pose_rotation() converts for us.
+#
+# Handy signs (the character faces -Y):
+#   legs / arms (bones pointing down): X negative = swing forward
+#   spine / chest / neck (pointing up): X positive = lean forward
+#   left arm:  Y negative = raise out to the side  (right arm: Y positive)
+#              (list Y before X: raise the arm out first, then swing it)
+#   Z negative = turn the left side forward
+#
+# "_loc" moves the hips bone (and so the whole body) in metres.
+
+FPS = 24
+
+
+def mirror_pose(pose):
+    """Left/right mirror image of a pose: swap .L/.R bones and flip the
+    side-to-side parts (Y and Z rotations, X movement)."""
+    out = {}
+    for bone, value in pose.items():
+        if bone == "_loc":
+            out[bone] = (-value[0], value[1], value[2])
+            continue
+        if bone.endswith(".L"):
+            name = bone[:-2] + ".R"
+        elif bone.endswith(".R"):
+            name = bone[:-2] + ".L"
+        else:
+            name = bone
+        out[name] = [(axis, -deg if axis in "YZ" else deg) for axis, deg in value]
+    return out
+
+
+# ---- Run: an exaggerated, bounding run. The arms are held bent like a
+# cartoon sprinter: the forward arm thrown up high with the forearm
+# pointing at the sky, the back arm cocked behind. -----------------------
+
+RUN_CONTACT = {  # left foot lands far forward, right leg trails
+    "_loc": (0, 0, -0.04),
+    "hips": [("Z", -10)],
+    "spine": [("X", 10), ("Z", 5)],
+    "chest": [("X", 6), ("Z", 9)],
+    "neck": [("X", -6)],
+    "head": [("X", -6), ("Z", -14)],
+    "thigh.L": [("X", -42)],
+    "shin.L": [("X", 15)],
+    "thigh.R": [("X", 28)],
+    "shin.R": [("X", 70)],
+    "foot.R": [("X", 30)],
+    "upper_arm.R": [("Y", 40), ("X", -75)],
+    "forearm.R": [("X", -95)],
+    "hand.R": [("X", -10)],
+    "upper_arm.L": [("Y", -30), ("X", 50)],
+    "forearm.L": [("X", -65)],
+}
+
+RUN_PASS = {  # body sinks over the left leg, right leg tucks through
+    "_loc": (0, 0, -0.08),
+    "hips": [],
+    "spine": [("X", 13)],
+    "chest": [("X", 6)],
+    "neck": [("X", -7)],
+    "head": [("X", -7)],
+    "thigh.L": [("X", 2)],
+    "shin.L": [("X", 30)],
+    "foot.L": [("X", -8)],
+    "thigh.R": [("X", -20)],
+    "shin.R": [("X", 115)],
+    "foot.R": [("X", 35)],
+    "upper_arm.R": [("Y", 35), ("X", -25)],
+    "forearm.R": [("X", -85)],
+    "upper_arm.L": [("Y", -35), ("X", -5)],
+    "forearm.L": [("X", -85)],
+}
+
+RUN_LEAP = {  # pushed off the left leg: airborne, right knee driving high
+    "_loc": (0, 0, 0.10),
+    "hips": [("Z", 9)],
+    "spine": [("X", 8), ("Z", -5)],
+    "chest": [("X", 5), ("Z", -9)],
+    "neck": [("X", -5)],
+    "head": [("X", -5), ("Z", 14)],
+    "thigh.R": [("X", -75)],
+    "shin.R": [("X", 85)],
+    "foot.R": [("X", 10)],
+    "thigh.L": [("X", 38)],
+    "shin.L": [("X", 45)],
+    "foot.L": [("X", 40)],
+    "upper_arm.L": [("Y", -45), ("X", -85)],
+    "forearm.L": [("X", -100)],
+    "hand.L": [("X", -12)],
+    "upper_arm.R": [("Y", 32), ("X", 60)],
+    "forearm.R": [("X", -55)],
+}
+
+# One full cycle is two steps: the left-foot half, then its mirror image.
+RUN_KEYS = [
+    (0, RUN_CONTACT),
+    (3, RUN_PASS),
+    (5, RUN_LEAP),
+    (8, mirror_pose(RUN_CONTACT)),
+    (11, mirror_pose(RUN_PASS)),
+    (13, mirror_pose(RUN_LEAP)),
+    (16, RUN_CONTACT),  # same as frame 0, so the loop is seamless
+]
+
+# ---- Idle: standing relaxed and breathing. ------------------------------
+
+IDLE_REST = {
+    "upper_arm.L": [("Y", -7)], "upper_arm.R": [("Y", 7)],
+    "forearm.L": [("X", -12)], "forearm.R": [("X", -12)],
+    "chest": [],
+    "head": [],
+}
+IDLE_BREATHE = {
+    "_loc": (0, 0, -0.006),
+    "upper_arm.L": [("Y", -9)], "upper_arm.R": [("Y", 9)],
+    "forearm.L": [("X", -15)], "forearm.R": [("X", -15)],
+    "chest": [("X", -2.5)],
+    "head": [("X", 2)],
+}
+IDLE_KEYS = [(0, IDLE_REST), (24, IDLE_BREATHE), (48, IDLE_REST)]
+
+ANIMATIONS = {"run": RUN_KEYS, "idle": IDLE_KEYS}
+
+
+def pose_rotation(rest_quat, rotations):
+    """Turn [(axis, degrees), ...] in armature space into the bone-local
+    quaternion that Blender stores for a pose bone."""
+    world = Quaternion()  # identity
+    for axis, deg in rotations:
+        vec = {"X": (1, 0, 0), "Y": (0, 1, 0), "Z": (0, 0, 1)}[axis]
+        world = Quaternion(vec, math.radians(deg)) @ world
+    # A pose bone's rotation is relative to its own rest orientation, so
+    # express the armature-space rotation in the bone's frame.
+    local = rest_quat.inverted() @ world @ rest_quat
+    if local.w < 0:  # keep neighbouring keys in the same "hemisphere"
+        local.negate()
+    return local
+
+
+def make_animations(arm_obj):
+    arm_obj.animation_data_create()
+    for pb in arm_obj.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    hips_rest = arm_obj.data.bones["hips"].matrix_local.to_quaternion()
+
+    for anim_name, keys in ANIMATIONS.items():
+        action = bpy.data.actions.new(anim_name)
+        action.use_fake_user = True  # keep it saved even when not assigned
+        arm_obj.animation_data.action = action
+        for frame, pose in keys:
+            # Key every bone on every key frame (identity if the pose doesn't
+            # mention it), so no bone keeps a leftover value.
+            for pb in arm_obj.pose.bones:
+                rest = pb.bone.matrix_local.to_quaternion()
+                pb.rotation_quaternion = pose_rotation(rest, pose.get(pb.name, []))
+                pb.keyframe_insert("rotation_quaternion", frame=frame)
+            hips = arm_obj.pose.bones["hips"]
+            hips.location = hips_rest.inverted() @ Vector(pose.get("_loc", (0, 0, 0)))
+            hips.keyframe_insert("location", frame=frame)
+        print(f"[make_player] animation '{anim_name}': {keys[-1][0]} frames")
+
+    scene = bpy.context.scene
+    scene.render.fps = FPS
+    scene.frame_start = 0
+    scene.frame_end = RUN_KEYS[-1][0]
+    # Leave "run" active so pressing Play in Blender shows it straight away.
+    arm_obj.animation_data.action = bpy.data.actions["run"]
+
+
 def make_material():
     """A matte material whose colour comes from the vertex colours. glTF
     exports this as COLOR_0, which Godot multiplies into the albedo."""
@@ -306,6 +483,8 @@ def build():
     mod = obj.modifiers.new("Armature", "ARMATURE")
     mod.object = arm_obj
 
+    make_animations(arm_obj)
+
     tris = sum(len(p.vertices) - 2 for p in mesh.polygons)
     print(f"[make_player] vertices={len(mesh.vertices)} triangles={tris}")
     return arm_obj, obj
@@ -320,7 +499,8 @@ def export():
         export_yup=True,
         export_apply=False,          # keep the armature modifier as skinning
         export_skins=True,
-        export_animations=False,
+        export_animations=True,
+        export_animation_mode="ACTIONS",  # every action becomes a clip
     )
     print(f"[make_player] wrote {BLEND_PATH} and {GLB_PATH}")
 
@@ -349,14 +529,55 @@ def render_previews(out_dir):
     # "game" roughly matches the in-game camera: high and at 45 degrees.
     views = {"front": (0, 5), "three_quarter": (35, 10), "side": (90, 5),
              "back": (180, 5), "game": (45, 30)}
-    for name, (deg, elev) in views.items():
+    def aim(deg, elev):
         a, e = math.radians(deg), math.radians(elev)
         cam.location = target + 6 * Vector((
             math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e)))
         direction = target - cam.location
         cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
+    # Static views in the rest pose (no action playing).
+    rig = bpy.data.objects["PlayerRig"]
+    run_action = rig.animation_data.action
+    rig.animation_data.action = None
+    for pb in rig.pose.bones:
+        pb.rotation_quaternion = Quaternion()
+        pb.location = (0, 0, 0)
+    for name, (deg, elev) in views.items():
+        aim(deg, elev)
         scene.render.filepath = os.path.join(out_dir, f"player_{name}.png")
         bpy.ops.render.render(write_still=True)
+
+    # The run cycle's key frames, side by side in one strip per view.
+    rig.animation_data.action = run_action
+    scene.render.resolution_x = 300
+    scene.render.resolution_y = 480
+    cam_data.ortho_scale = 2.3
+    frames = [f for f, _ in RUN_KEYS[:-1]]
+    for name, (deg, elev) in {"side": (90, 5), "three_quarter": (35, 10)}.items():
+        aim(deg, elev)
+        tiles = []
+        for f in frames:
+            scene.frame_set(f)
+            path = os.path.join(out_dir, f"_tile_{f}.png")
+            scene.render.filepath = path
+            bpy.ops.render.render(write_still=True)
+            img = bpy.data.images.load(path)
+            tiles.append(list(img.pixels))
+            bpy.data.images.remove(img)
+            os.remove(path)
+        w, h = scene.render.resolution_x, scene.render.resolution_y
+        strip = bpy.data.images.new("strip", w * len(tiles), h)
+        px = [0.0] * (w * len(tiles) * h * 4)
+        for t, tile in enumerate(tiles):
+            for y in range(h):
+                row = tile[y * w * 4:(y + 1) * w * 4]
+                start = (y * w * len(tiles) + t * w) * 4
+                px[start:start + w * 4] = row
+        strip.pixels = px
+        strip.filepath_raw = os.path.join(out_dir, f"run_{name}.png")
+        strip.file_format = "PNG"
+        strip.save()
 
 
 if __name__ == "__main__":
