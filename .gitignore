@@ -4,3 +4,6 @@
 
 # Editor-specific settings
 .vscode/
+
+# Blender auto-backups
+*.blend1

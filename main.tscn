@@ -1,9 +1,49 @@
 [gd_scene format=3 uid="uid://vf3eeiw720ly"]
 
-[ext_resource type="Texture2D" uid="uid://coyvhrlrn2vh4" path="res://icon.svg" id="1_ig7tw"]
+[ext_resource type="Script" uid="uid://g643fx74r04c" path="res://scripts/Player.cs" id="1_player"]
+[ext_resource type="PackedScene" uid="uid://v7q7fr2bbfca" path="res://models/player.glb" id="2_model"]
 
-[node name="Main" type="Node2D" unique_id=1968675867]
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.12, 0.11, 0.16, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.55, 0.55, 0.65, 1)
+ambient_light_energy = 0.6
 
-[node name="Icon" type="Sprite2D" parent="." unique_id=614175462]
-position = Vector2(672, 341)
-texture = ExtResource("1_ig7tw")
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.32, 0.42, 0.3, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+material = SubResource("StandardMaterial3D_ground")
+size = Vector2(100, 100)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.3
+height = 1.8
+
+[node name="Main" type="Node3D" unique_id=1626173012]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1815554994]
+environment = SubResource("Environment_main")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=914282417]
+transform = Transform3D(0.70711, -0.35355, 0.61237, 0, 0.86603, 0.5, -0.70711, -0.35355, 0.61237, 24.495, 20, 24.495)
+keep_aspect = 0
+fov = 25.0
+near = 1.0
+far = 200.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1474654384]
+transform = Transform3D(0.93969, 0.28017, -0.19617, 0, 0.57358, 0.81915, 0.34202, -0.76975, 0.53899, 0, 0, 0)
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=538468310]
+mesh = SubResource("PlaneMesh_ground")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=836155113]
+script = ExtResource("1_player")
+
+[node name="Model" parent="Player" unique_id=1328809781 instance=ExtResource("2_model")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=51307331]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
