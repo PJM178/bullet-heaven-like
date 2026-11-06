@@ -24,6 +24,11 @@ public partial class Player : CharacterBody3D
     // Seconds to cross-fade between run and idle, so switching isn't a pop.
     [Export] public float AnimationBlendTime = 0.12f;
 
+    // How many times per second the character's pose updates. A low value
+    // (around 10-15) gives the choppy, stepped look of PS1-era games, while
+    // movement and the rest of the game stay smooth. 0 = update every frame.
+    [Export] public float AnimationFps = 12.0f;
+
     // Animation names, as exported from Blender. A StringName is Godot's
     // fast, interned string type. Creating it once here ("static readonly")
     // avoids converting a C# string to a StringName every frame.
@@ -39,6 +44,9 @@ public partial class Player : CharacterBody3D
     // Remembers which animation we asked for, so we only call Play() when
     // it actually changes.
     private bool _isRunning;
+
+    // Game time collected since the pose was last updated (see _Process).
+    private double _animationTimeAccumulated;
 
     // The camera viewing the scene. We need it so "left" means left on the
     // *screen*, not along the world X axis. The camera is rotated 45°,
@@ -60,6 +68,36 @@ public partial class Player : CharacterBody3D
 
     // _PhysicsProcess runs at a fixed rate (60 times per second by default),
     // which is the right place for movement and collisions.
+    // _Process runs once per rendered frame, which is the right place for
+    // purely visual updates like the animation pose.
+    public override void _Process(double delta)
+    {
+        if (AnimationFps <= 0.0f)
+        {
+            // Smooth mode: let the AnimationPlayer update itself every frame.
+            _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Idle;
+            return;
+        }
+
+        // Choppy mode: "Manual" stops the AnimationPlayer from advancing on
+        // its own; it only moves when we call Advance().
+        _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+
+        // Collect time, and once a whole step (e.g. 1/12 s) has passed, jump
+        // the animation forward by that many steps in one go. In between,
+        // the pose holds still, which is what makes it look stepped.
+        _animationTimeAccumulated += delta;
+        double step = 1.0 / AnimationFps;
+        if (_animationTimeAccumulated >= step)
+        {
+            // (int) cuts off the fraction, e.g. 2.7 steps -> 2 whole steps.
+            int steps = (int)(_animationTimeAccumulated / step);
+            _animationPlayer.Advance(steps * step);
+            // Keep the leftover fraction so the rhythm stays even.
+            _animationTimeAccumulated -= steps * step;
+        }
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         // GetVector combines four actions into one 2D vector:
