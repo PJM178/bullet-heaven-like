@@ -299,81 +299,80 @@ def mirror_pose(pose):
     return out
 
 
-# ---- Run: a determined, purposeful run, quicker than a jog but not an
-# all-out sprint. Torso leans forward, elbows stay bent at about 90 degrees
-# and the arms pump close to the body; stride and bounce are moderate. ----
+# ---- Run: a warrior's battle charge. Heavy and driven: a strong forward
+# lean with the head held up, looking at the target; knees stay bent and the
+# body low; each footfall lands with a drop; the knee drives forward hard;
+# arms pump powerfully with fists. Three poses per step (impact, pass,
+# push-off) carry the weight; linear motion keeps it stiff and PS1-like. --
 
-RUN_CONTACT = {  # left foot lands in front, right leg trails behind
-    "_loc": (0, 0, -0.025),
-    "hips": [("Z", -6)],
-    "spine": [("X", 9), ("Z", 3)],
-    "chest": [("X", 4), ("Z", 5)],
-    "neck": [("X", -5)],
-    "head": [("X", -5), ("Z", -8)],
-    "thigh.L": [("X", -30)],
-    "shin.L": [("X", 12)],
-    "foot.L": [("X", -5)],
-    "thigh.R": [("X", 20)],
-    "shin.R": [("X", 50)],
-    "foot.R": [("X", 22)],
-    # Arms are at their extremes here: right fully forward, left fully back
-    # with the hand behind the hip (forearm less bent so it clears the body).
-    "upper_arm.R": [("Y", 10), ("X", -50)],
-    "forearm.R": [("X", -80)],
-    "hand.R": [("X", -5)],
-    "upper_arm.L": [("Y", -13), ("X", 58)],
-    "forearm.L": [("X", -45)],
+RUN_CONTACT = {  # left foot slams down in front, body dips on impact
+    "_loc": (0, 0, -0.06),
+    "hips": [("Z", -8)],
+    "spine": [("X", 14), ("Z", 4)],
+    "chest": [("X", 8), ("Z", 8)],
+    "neck": [("X", -10)],
+    "head": [("X", -10), ("Z", -12)],  # counter-turn: eyes stay on target
+    "thigh.L": [("X", -38)],
+    "shin.L": [("X", 25)],             # knee bent to absorb the landing
+    "foot.L": [("X", -10)],
+    "thigh.R": [("X", 30)],
+    "shin.R": [("X", 60)],
+    "foot.R": [("X", 30)],
+    # Arms at their extremes: right fist driven forward, left pulled back.
+    "upper_arm.R": [("Y", 8), ("X", -55)],
+    "forearm.R": [("X", -85)],
+    "upper_arm.L": [("Y", -12), ("X", 55)],
+    "forearm.L": [("X", -50)],
 }
 
-RUN_PASS = {  # body over the left leg, right leg swings through bent
-    "_loc": (0, 0, -0.045),
-    "hips": [],
-    "spine": [("X", 10)],
-    "chest": [("X", 4)],
-    "neck": [("X", -5)],
-    "head": [("X", -5)],
-    "thigh.L": [("X", 0)],
-    "shin.L": [("X", 22)],
-    "foot.L": [("X", -6)],
-    "thigh.R": [("X", -15)],
-    "shin.R": [("X", 95)],
+RUN_PASS = {  # body low over the left leg, right leg drawn through tight
+    "_loc": (0, 0, -0.04),
+    "spine": [("X", 15)],
+    "chest": [("X", 8)],
+    "neck": [("X", -10)],
+    "head": [("X", -10)],
+    "thigh.L": [("X", 5)],
+    "shin.L": [("X", 35)],
+    "foot.L": [("X", -10)],
+    "thigh.R": [("X", -25)],
+    "shin.R": [("X", 105)],
     "foot.R": [("X", 25)],
-    # Arms mid-swing, passing the body in opposite directions.
-    "upper_arm.R": [("Y", 10), ("X", -5)],
-    "forearm.R": [("X", -78)],
-    "upper_arm.L": [("Y", -11), ("X", 5)],
+    # Arms passing the body in opposite directions.
+    "upper_arm.R": [("Y", 8), ("X", -5)],
+    "forearm.R": [("X", -85)],
+    "upper_arm.L": [("Y", -10), ("X", 5)],
     "forearm.L": [("X", -70)],
 }
 
-RUN_LEAP = {  # push off the left leg: brief flight, right knee forward
-    "_loc": (0, 0, 0.045),
+RUN_PUSH = {  # left leg drives off the ground, right knee punches forward
+    "_loc": (0, 0, 0.03),
     "hips": [("Z", 6)],
-    "spine": [("X", 8), ("Z", -3)],
-    "chest": [("X", 4), ("Z", -5)],
-    "neck": [("X", -5)],
-    "head": [("X", -5), ("Z", 8)],
-    "thigh.R": [("X", -45)],
-    "shin.R": [("X", 60)],
+    "spine": [("X", 13), ("Z", -3)],
+    "chest": [("X", 8), ("Z", -6)],
+    "neck": [("X", -10)],
+    "head": [("X", -10), ("Z", 9)],
+    "thigh.L": [("X", 30)],
+    "shin.L": [("X", 20)],
+    "foot.L": [("X", 35)],             # toes push off
+    "thigh.R": [("X", -55)],
+    "shin.R": [("X", 70)],
     "foot.R": [("X", 5)],
-    "thigh.L": [("X", 25)],
-    "shin.L": [("X", 35)],
-    "foot.L": [("X", 30)],
-    # Arms still travelling toward their next extremes (at the next contact).
-    "upper_arm.L": [("Y", -10), ("X", -40)],
-    "forearm.L": [("X", -80)],
-    "hand.L": [("X", -5)],
-    "upper_arm.R": [("Y", 12), ("X", 42)],
-    "forearm.R": [("X", -52)],
+    # Arms still travelling toward their next extremes.
+    "upper_arm.L": [("Y", -9), ("X", -45)],
+    "forearm.L": [("X", -85)],
+    "upper_arm.R": [("Y", 11), ("X", 45)],
+    "forearm.R": [("X", -55)],
 }
 
 # One full cycle is two steps: the left-foot half, then its mirror image.
+# 16 frames at 24 fps = 0.67 s.
 RUN_KEYS = [
     (0, RUN_CONTACT),
     (3, RUN_PASS),
-    (5, RUN_LEAP),
+    (6, RUN_PUSH),
     (8, mirror_pose(RUN_CONTACT)),
     (11, mirror_pose(RUN_PASS)),
-    (13, mirror_pose(RUN_LEAP)),
+    (14, mirror_pose(RUN_PUSH)),
     (16, RUN_CONTACT),  # same as frame 0, so the loop is seamless
 ]
 
@@ -394,7 +393,9 @@ IDLE_BREATHE = {
 }
 IDLE_KEYS = [(0, IDLE_REST), (24, IDLE_BREATHE), (48, IDLE_REST)]
 
-ANIMATIONS = {"run": RUN_KEYS, "idle": IDLE_KEYS}
+# name -> (keys, how to move between keys). "LINEAR" gives the even,
+# mechanical motion of the run; "AUTO" is smooth Bezier for the idle.
+ANIMATIONS = {"run": (RUN_KEYS, "LINEAR"), "idle": (IDLE_KEYS, "AUTO")}
 
 
 def pose_rotation(rest_quat, rotations):
@@ -412,18 +413,25 @@ def pose_rotation(rest_quat, rotations):
     return local
 
 
-def set_auto_handles(action):
-    """Switch every key to "Auto" Bezier handles, so motion flows *through*
-    a key. Blender's default, "Auto Clamped", eases into and out of every
-    key, which makes limbs pause at each one (the arms seemed to stop)."""
+def set_interpolation(action, mode):
+    """Set how every key moves to the next one.
+
+    "LINEAR": straight, even motion between keys.
+    "AUTO": smooth Bezier that flows *through* keys. Blender's default,
+    "Auto Clamped", eases into and out of every key instead, which makes
+    limbs pause at each one."""
     # Blender 4.4+ stores keys in layers -> strips -> channel bags.
     for layer in action.layers:
         for strip in layer.strips:
             for bag in strip.channelbags:
                 for fcurve in bag.fcurves:
                     for key in fcurve.keyframe_points:
-                        key.handle_left_type = "AUTO"
-                        key.handle_right_type = "AUTO"
+                        if mode == "LINEAR":
+                            key.interpolation = "LINEAR"
+                        else:
+                            key.interpolation = "BEZIER"
+                            key.handle_left_type = "AUTO"
+                            key.handle_right_type = "AUTO"
                     fcurve.update()
 
 
@@ -433,7 +441,7 @@ def make_animations(arm_obj):
         pb.rotation_mode = "QUATERNION"
     hips_rest = arm_obj.data.bones["hips"].matrix_local.to_quaternion()
 
-    for anim_name, keys in ANIMATIONS.items():
+    for anim_name, (keys, interpolation) in ANIMATIONS.items():
         action = bpy.data.actions.new(anim_name)
         action.use_fake_user = True  # keep it saved even when not assigned
         arm_obj.animation_data.action = action
@@ -447,7 +455,7 @@ def make_animations(arm_obj):
             hips = arm_obj.pose.bones["hips"]
             hips.location = hips_rest.inverted() @ Vector(pose.get("_loc", (0, 0, 0)))
             hips.keyframe_insert("location", frame=frame)
-        set_auto_handles(action)
+        set_interpolation(action, interpolation)
         print(f"[make_player] animation '{anim_name}': {keys[-1][0]} frames")
 
     scene = bpy.context.scene

@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leaves"]
+albedo_color = Color(0.2, 0.42, 0.18, 1)
+roughness = 1.0
+metallic_specular = 0.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_leaves"]
+material = SubResource("StandardMaterial3D_leaves")
+radius = 0.4
+height = 0.7
+radial_segments = 7
+rings = 3
+
+[node name="Bush" type="Node3D"]
+
+[node name="Clump1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+mesh = SubResource("SphereMesh_leaves")
+
+[node name="Clump2" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.75, 0, 0, 0, 0.75, 0, 0, 0, 0.75, 0.38, 0.24, 0.12)
+mesh = SubResource("SphereMesh_leaves")
+
+[node name="Clump3" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, -0.3, 0.22, 0.25)
+mesh = SubResource("SphereMesh_leaves")

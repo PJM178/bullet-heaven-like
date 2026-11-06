@@ -22,7 +22,7 @@ public partial class Player : CharacterBody3D
     [Export] public float TurnSpeed = 14.0f;
 
     // Seconds to cross-fade between run and idle, so switching isn't a pop.
-    [Export] public float AnimationBlendTime = 0.12f;
+    [Export] public float AnimationBlendTime = 0.06f;
 
     // How many times per second the character's pose updates. A low value
     // (around 10-15) gives the choppy, stepped look of PS1-era games, while

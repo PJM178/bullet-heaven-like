@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://g643fx74r04c" path="res://scripts/Player.cs" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://v7q7fr2bbfca" path="res://models/player.glb" id="2_model"]
+[ext_resource type="Script" path="res://scripts/CameraFollow.cs" id="3_camera"]
+[ext_resource type="PackedScene" path="res://props/bush.tscn" id="4_bush"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -26,12 +28,14 @@ height = 1.8
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1815554994]
 environment = SubResource("Environment_main")
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=914282417]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=914282417 node_paths=PackedStringArray("Target")]
 transform = Transform3D(0.70711, -0.35355, 0.61237, 0, 0.86603, 0.5, -0.70711, -0.35355, 0.61237, 24.495, 20, 24.495)
 keep_aspect = 0
 fov = 25.0
 near = 1.0
 far = 200.0
+script = ExtResource("3_camera")
+Target = NodePath("../Player")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1474654384]
 transform = Transform3D(0.93969, 0.28017, -0.19617, 0, 0.57358, 0.81915, 0.34202, -0.76975, 0.53899, 0, 0, 0)
@@ -47,5 +51,8 @@ script = ExtResource("1_player")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=51307331]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_player")
+
+[node name="Bush" parent="." instance=ExtResource("4_bush")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
 
 [editable path="Player/Model"]
