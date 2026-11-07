@@ -11,7 +11,7 @@ namespace BulletHeavenLike;
 ///      to the side (Drop). It arcs under gravity until it falls back to
 ///      hover height.
 ///   2. Hover: it floats in place, bobbing (the bob is done on the GPU,
-///      see shaders/xp_orb.gdshader).
+///      see pickups/xp_orb.gdshader).
 ///   3. Home: after a short pause, an orb within MagnetRadius of the player
 ///      flies at them, speeding up, and is absorbed: the player gains its
 ///      XP. Orbs further away keep hovering until the player comes close.

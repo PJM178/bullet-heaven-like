@@ -31,6 +31,31 @@ Running the game and deploying to the phone happen from the Godot editor
 (F5 / the Android one-click deploy icon). Close the Godot editor before
 renaming or moving project files from outside it.
 
+## Folder layout
+
+Files are grouped by **feature**, not by type: a script lives next to the
+scenes, models, shaders and materials it belongs to.
+
+```
+game.tscn, main.tscn   entry scenes (UI shell, and the 3D world)
+core/                  shared by everything (base PS1 shader, hit flash)
+player/                Player, camera, player model
+enemies/               EnemyManager, enemy scenes and models
+weapons/<name>/        one folder per weapon (sword/, projectiles/, ...)
+pickups/               XP orbs and other collectables
+ui/                    layout, joystick, HUD
+props/                 level decoration
+art/                   Blender sources and generator scripts (.gdignore'd)
+```
+
+A new weapon gets its own folder under `weapons/`; code shared by several
+weapons goes in `weapons/` itself. All C# stays in the single
+`BulletHeavenLike` namespace regardless of folder.
+
+Move or rename files with the Godot editor's FileSystem dock, which updates
+references. From outside the editor (editor closed), `git mv` the file
+together with its `.uid` / `.import` sidecars and rewrite its `res://` paths.
+
 ## Code conventions
 
 - C# for game code. GDScript only for small glue/UI scripts, if at all.

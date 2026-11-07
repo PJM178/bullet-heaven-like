@@ -1,6 +1,6 @@
 [gd_resource type="ShaderMaterial" load_steps=2 format=3]
 
-[ext_resource type="Shader" path="res://shaders/ps1_vertex_color.gdshader" id="1_shader"]
+[ext_resource type="Shader" path="res://core/ps1_vertex_color.gdshader" id="1_shader"]
 
 [resource]
 resource_name = "BushMat"

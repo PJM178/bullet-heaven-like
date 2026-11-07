@@ -36,7 +36,7 @@ public partial class SwordWeapon : Node3D
     [Export(PropertyHint.Range, "5,360,1")] public float ArcDegrees = 30.0f;
 
     [ExportGroup("Slash visual")]
-    // A ShaderMaterial using shaders/sword_slash.gdshader.
+    // A ShaderMaterial using sword_slash.gdshader (next to this script).
     [Export] public Material SlashMaterial;
     // Seconds the slash takes to sweep across and fade.
     [Export] public float SwingDuration = 0.18f;

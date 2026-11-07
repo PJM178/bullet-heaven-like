@@ -1,8 +1,8 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/GameLayout.cs" id="1_layout"]
+[ext_resource type="Script" path="res://ui/GameLayout.cs" id="1_layout"]
 [ext_resource type="PackedScene" path="res://main.tscn" id="2_world"]
-[ext_resource type="Script" path="res://scripts/VirtualJoystick.cs" id="3_joystick"]
+[ext_resource type="Script" path="res://ui/VirtualJoystick.cs" id="3_joystick"]
 [ext_resource type="PackedScene" path="res://ui/stress_test_hud.tscn" id="4_hud"]
 
 [node name="Game" type="Control"]

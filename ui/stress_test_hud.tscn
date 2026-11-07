@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/StressTestHud.cs" id="1_hud"]
+[ext_resource type="Script" path="res://ui/StressTestHud.cs" id="1_hud"]
 
 [node name="StressTestHud" type="CanvasLayer"]
 script = ExtResource("1_hud")

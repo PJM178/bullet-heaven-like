@@ -74,7 +74,7 @@ public partial class EnemyManager : Node3D
     [Export] public float HitFlashDuration = 0.12f;
 
     // The material a hit enemy is drawn with while it flashes
-    // (shaders/hit_flash_material.tres). One material shared by every
+    // (core/hit_flash_material.tres). One material shared by every
     // enemy; leave it empty to turn the flash off.
     [Export] public Material HitFlashMaterial;
 

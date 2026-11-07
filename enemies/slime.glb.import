@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://cyja5akl5m412"
-path="res://.godot/imported/slime.glb-d61245a727b3824156ab9507a11fdde1.scn"
+path="res://.godot/imported/slime.glb-1be488965c783013e39c7f7ac30c6fb7.scn"
 
 [deps]
 
-source_file="res://models/slime.glb"
-dest_files=["res://.godot/imported/slime.glb-d61245a727b3824156ab9507a11fdde1.scn"]
+source_file="res://enemies/slime.glb"
+dest_files=["res://.godot/imported/slime.glb-1be488965c783013e39c7f7ac30c6fb7.scn"]
 
 [params]
 
@@ -4157,8 +4157,8 @@ _subresources={
 "materials": {
 "SlimeMat": {
 "use_external/enabled": true,
-"use_external/fallback_path": "res://models/slime_material.tres",
-"use_external/path": "res://models/slime_material.tres"
+"use_external/fallback_path": "res://enemies/slime_material.tres",
+"use_external/path": "res://enemies/slime_material.tres"
 }
 }
 }

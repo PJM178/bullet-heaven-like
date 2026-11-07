@@ -1,6 +1,6 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://shaders/sword_slash.gdshader" id="1_shader"]
+[ext_resource type="Shader" path="res://weapons/sword/sword_slash.gdshader" id="1_shader"]
 
 [resource]
 render_priority = 1

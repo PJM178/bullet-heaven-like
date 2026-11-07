@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="PackedScene" uid="uid://cyja5akl5m412" path="res://models/slime.glb" id="1_model"]
+[ext_resource type="PackedScene" uid="uid://cyja5akl5m412" path="res://enemies/slime.glb" id="1_model"]
 
 [node name="Slime" type="Node3D"]
 

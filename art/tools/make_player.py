@@ -7,7 +7,7 @@ Run from the project root:
 
 It writes:
   art/player.blend    - editable source; open it in Blender and keep sculpting
-  models/player.glb   - what Godot imports
+  player/player.glb   - what Godot imports
 
 The character is built from simple "lofted" pieces (a stack of rings joined
 into a tube), the way PS1-era characters were built from separate rigid parts.
@@ -28,7 +28,7 @@ from mathutils import Quaternion, Vector
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BLEND_PATH = os.path.join(ROOT, "art", "player.blend")
-GLB_PATH = os.path.join(ROOT, "models", "player.glb")
+GLB_PATH = os.path.join(ROOT, "player", "player.glb")
 
 # --- Palette (sRGB 0..1). A neutral display mannequin: light grey shell,
 # slightly darker grey hands, feet and neck so the segments read clearly.

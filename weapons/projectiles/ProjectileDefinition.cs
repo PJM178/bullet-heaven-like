@@ -13,7 +13,7 @@ namespace BulletHeavenLike;
 /// (for example a damage upgrade) without changing the definition.
 /// </summary>
 // A Resource is Godot's type for reusable data. Each projectile kind is
-// saved as its own .tres file (e.g. projectiles/shard.tres) and edited in
+// saved as its own .tres file (e.g. weapons/projectiles/shard.tres) and edited in
 // the Inspector, so new kinds need no new code.
 //
 // [GlobalClass] registers this class with the editor by name, so it shows

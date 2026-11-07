@@ -7,7 +7,7 @@ Run from the project root:
 
 It writes:
   art/slime.blend    - editable source
-  models/slime.glb   - what Godot imports
+  enemies/slime.glb  - what Godot imports
 
 A simple slime: a round drop of goo that rises into a pointed tip swept
 back, with two dark eyes. Smooth (Gouraud) shading keeps it soft and
@@ -32,7 +32,7 @@ from mathutils import Quaternion, Vector
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BLEND_PATH = os.path.join(ROOT, "art", "slime.blend")
-GLB_PATH = os.path.join(ROOT, "models", "slime.glb")
+GLB_PATH = os.path.join(ROOT, "enemies", "slime.glb")
 
 # --- Palette (sRGB 0..1). A muted teal, darker where it touches the
 # ground. Kept dusty rather than bright to sit in the game's PS1 mood. -----

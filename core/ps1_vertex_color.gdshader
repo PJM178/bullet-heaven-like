@@ -6,7 +6,7 @@
 //
 // Each model has its own ShaderMaterial (.tres) that points at this file
 // and fills in the "uniform" settings below. Models of the same kind share
-// one material, e.g. every slime uses models/slime_material.tres.
+// one material, e.g. every slime uses enemies/slime_material.tres.
 shader_type spatial;
 
 // Multiplied with the vertex colours. Models painted with vertex colours
@@ -17,7 +17,7 @@ shader_type spatial;
 uniform vec4 tint : source_color = vec4(1.0);
 
 // How white the model is drawn: 0 = normal, 1 = fully white. Normal
-// materials leave it at 0. shaders/hit_flash_material.tres sets it to 1,
+// materials leave it at 0. core/hit_flash_material.tres sets it to 1,
 // and code swaps that material onto a model while it flashes (see
 // EnemyManager.SetHitFlash). Using this same shader for the flash means
 // the PS1 effects added here later apply to flashing models too.

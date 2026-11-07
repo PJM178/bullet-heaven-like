@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://v7q7fr2bbfca"
-path="res://.godot/imported/player.glb-874246918b1d1ae729e6f5a64d32052b.scn"
+path="res://.godot/imported/player.glb-d5e59c3624fa2635da7ea043f9526ccc.scn"
 
 [deps]
 
-source_file="res://models/player.glb"
-dest_files=["res://.godot/imported/player.glb-874246918b1d1ae729e6f5a64d32052b.scn"]
+source_file="res://player/player.glb"
+dest_files=["res://.godot/imported/player.glb-d5e59c3624fa2635da7ea043f9526ccc.scn"]
 
 [params]
 
@@ -4157,8 +4157,8 @@ _subresources={
 "materials": {
 "PlayerMat": {
 "use_external/enabled": true,
-"use_external/fallback_path": "res://models/player_material.tres",
-"use_external/path": "res://models/player_material.tres"
+"use_external/fallback_path": "res://player/player_material.tres",
+"use_external/path": "res://player/player_material.tres"
 }
 }
 }
