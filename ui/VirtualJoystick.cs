@@ -34,6 +34,12 @@ public partial class VirtualJoystick : Control
     // that wobbles slightly doesn't make the player creep around.
     [Export(PropertyHint.Range, "0,0.9,0.05")] public float DeadZone = 0.15f;
 
+    // The stick is analog: its strength grows from 0 at the dead zone to 1
+    // (full speed for the move stick) at this fraction of Radius. Below 1,
+    // so full speed is reached a little before the knob hits the edge and
+    // is easy to hold.
+    [Export(PropertyHint.Range, "0.2,1,0.05")] public float FullTiltAt = 0.9f;
+
     // The actions this stick presses. The move stick keeps the defaults;
     // the aim stick sets them to aim_left, aim_right, ... in game.tscn.
     // StringName is Godot's fast string type for names like these; the
@@ -147,16 +153,21 @@ public partial class VirtualJoystick : Control
         QueueRedraw();
 
         Vector2 offset = _knob - _center;
+        float distance = offset.Length();
         Vector2 direction = Vector2.Zero;
 
-        // Outside the dead zone the output is always full strength in the
-        // stick's direction: the stick only steers. ("Normalized" makes
-        // the vector length 1.) For the move stick that means full speed;
-        // most bullet heavens play like this, since dodging needs full
-        // speed, not careful creeping. The aim stick only needs a direction.
-        if (offset.Length() > Radius * DeadZone)
+        // Analog output: the further the knob is pushed, the stronger.
+        // InverseLerp(a, b, x) says how far x is from a to b as 0..1, so
+        // the dead zone's edge maps to 0 and FullTiltAt to 1; Clamp keeps
+        // anything past FullTiltAt at 1. For the move stick this is the
+        // speed, so a small push walks slowly and a full push runs. The
+        // aim stick's strength is ignored; only its direction matters.
+        float deadZoneEdge = Radius * DeadZone;
+        if (distance > deadZoneEdge)
         {
-            direction = offset.Normalized();
+            float strength = Mathf.Clamp(Mathf.InverseLerp(deadZoneEdge, Radius * FullTiltAt, distance), 0.0f, 1.0f);
+            // offset / distance is the direction with length 1.
+            direction = offset / distance * strength;
         }
 
         // Screen y grows downwards, so a negative y means "up".

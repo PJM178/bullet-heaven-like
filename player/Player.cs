@@ -39,6 +39,11 @@ public partial class Player : CharacterBody3D
     // movement and the rest of the game stay smooth. 0 = update every frame.
     [Export] public float AnimationFps = 12.0f;
 
+    // When moving slower than full speed (a light push on the joystick),
+    // the legs slow down to match, so the feet don't slide. They never go
+    // slower than this fraction of normal pace, so the steps still read.
+    [Export(PropertyHint.Range, "0.1,1,0.05")] public float MinLegPace = 0.35f;
+
     // Animation names, as exported from Blender. A StringName is Godot's
     // fast, interned string type. Creating it once here ("static readonly")
     // avoids converting a C# string to a StringName every frame.
@@ -74,6 +79,10 @@ public partial class Player : CharacterBody3D
 
     // Game time collected since the pose was last updated (see _Process).
     private double _animationTimeAccumulated;
+
+    // How fast the animation plays right now: 1 = normal, lower while
+    // moving slowly (see UpdateAnimation and MinLegPace).
+    private float _animationPace = 1.0f;
 
     // The camera viewing the scene. We need it so "left" means left on the
     // *screen*, not along the world X axis. The camera is rotated 45°,
@@ -249,27 +258,30 @@ public partial class Player : CharacterBody3D
     // purely visual updates like the animation pose.
     public override void _Process(double delta)
     {
+        // "Manual" stops the AnimationTree from advancing on its own; it
+        // only moves when we call Advance(). That way we control both the
+        // stepped look and the playback pace.
+        _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+
         if (AnimationFps <= 0.0f)
         {
-            // Smooth mode: let the AnimationTree update itself every frame.
-            _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Idle;
+            // Smooth mode: advance every frame.
+            _animationTree.Advance(delta * _animationPace);
             return;
         }
 
-        // Choppy mode: "Manual" stops the AnimationTree from advancing on
-        // its own; it only moves when we call Advance().
-        _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
-
-        // Collect time, and once a whole step (e.g. 1/12 s) has passed, jump
-        // the animation forward by that many steps in one go. In between,
-        // the pose holds still, which is what makes it look stepped.
+        // Choppy mode: collect real time, and once a whole step (e.g.
+        // 1/12 s) has passed, jump the animation forward by that many steps
+        // in one go. In between, the pose holds still, which is what makes
+        // it look stepped. The pose still changes AnimationFps times a
+        // second when moving slowly; only how far each jump goes shrinks.
         _animationTimeAccumulated += delta;
         double step = 1.0 / AnimationFps;
         if (_animationTimeAccumulated >= step)
         {
             // (int) cuts off the fraction, e.g. 2.7 steps -> 2 whole steps.
             int steps = (int)(_animationTimeAccumulated / step);
-            _animationTree.Advance(steps * step);
+            _animationTree.Advance(steps * step * _animationPace);
             // Keep the leftover fraction so the rhythm stays even.
             _animationTimeAccumulated -= steps * step;
         }
@@ -279,10 +291,17 @@ public partial class Player : CharacterBody3D
     {
         // GetVector combines four actions into one 2D vector:
         //   x: -1 (left) .. +1 (right),  y: -1 (up) .. +1 (down)
-        // It also normalizes diagonals, so holding Up + Right isn't ~41%
-        // faster than holding just one key. (Vector2 and Vector3 are structs,
-        // value types, so creating them every frame doesn't allocate memory.)
-        Vector2 input = Input.GetVector(MoveLeft, MoveRight, MoveUp, MoveDown);
+        // It also caps the length at 1, so holding Up + Right isn't ~41%
+        // faster than holding just one key. Its length is the speed:
+        // keys give 1, the joystick anything from 0 to 1 (analog).
+        //
+        // The last argument is the dead zone. We pass 0 because the
+        // joystick already has its own: Godot's default would squash small
+        // stick values to zero and rescale the rest, so a light push
+        // wouldn't come out as the slow speed the joystick meant.
+        // (Vector2 and Vector3 are structs, value types, so creating them
+        // every frame doesn't allocate memory.)
+        Vector2 input = Input.GetVector(MoveLeft, MoveRight, MoveUp, MoveDown, 0.0f);
         Vector3 direction = ScreenToGround(input);
 
         // Velocity is a property of CharacterBody3D. MoveAndSlide() moves the
@@ -401,7 +420,16 @@ public partial class Player : CharacterBody3D
         // the other: 1 = same way, 0 = at right angles, -1 = opposite. So
         // these two dots are the movement's "right" and "forward" parts.
         // Standing still gives (0, 0): idle, in the middle of the map.
-        Vector2 target = new(moveDirection.Dot(Right), moveDirection.Dot(Forward));
+        //
+        // The blend uses the direction only (Normalized, length 1), so even
+        // a slow move plays a full stride rather than a half-faded one. The
+        // speed goes into the playback pace instead: half speed, legs at
+        // half pace (but never below MinLegPace), so the feet keep up with
+        // the ground. Normalized() of a zero vector is zero, so standing
+        // still still gives idle.
+        float speed = moveDirection.Length();
+        Vector2 target = new Vector2(moveDirection.Dot(Right), moveDirection.Dot(Forward)).Normalized();
+        _animationPace = speed > 0.01f ? Mathf.Max(speed, MinLegPace) : 1.0f;
 
         // Glide toward it at a steady rate whatever the frame rate (the
         // same trick as FaceDirection), so changes cross-fade.
