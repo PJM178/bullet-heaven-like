@@ -7,3 +7,8 @@
 
 # Blender auto-backups
 *.blend1
+
+# Android export output
+*.apk
+*.aab
+*.idsig

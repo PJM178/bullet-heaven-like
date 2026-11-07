@@ -11,15 +11,19 @@ config_version=5
 [application]
 
 config/name="Bullet Heaven Like"
-run/main_scene="uid://vf3eeiw720ly"
+run/main_scene="res://game.tscn"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [display]
 
+window/size/viewport_width=2400
+window/size/viewport_height=1080
+window/size/window_width_override=900
+window/size/window_height_override=405
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=1
+window/handheld/orientation=4
 
 [dotnet]
 

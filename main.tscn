@@ -6,7 +6,6 @@
 [ext_resource type="PackedScene" path="res://props/bush.tscn" id="4_bush"]
 [ext_resource type="PackedScene" path="res://enemies/slime.tscn" id="5_slime"]
 [ext_resource type="Script" path="res://scripts/EnemyManager.cs" id="6_enemies"]
-[ext_resource type="PackedScene" path="res://ui/stress_test_hud.tscn" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/FacingDebug.cs" id="8_facing"]
 [ext_resource type="Script" path="res://scripts/ProjectileManager.cs" id="9_projectiles"]
 [ext_resource type="Script" path="res://scripts/ProjectileTestShooter.cs" id="10_test_shooter"]
@@ -38,7 +37,6 @@ environment = SubResource("Environment_main")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=914282417 node_paths=PackedStringArray("Target")]
 transform = Transform3D(0.70711, -0.35355, 0.61237, 0, 0.86603, 0.5, -0.70711, -0.35355, 0.61237, 24.495, 20, 24.495)
-keep_aspect = 0
 fov = 25.0
 near = 1.0
 far = 200.0
@@ -77,14 +75,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
 script = ExtResource("6_enemies")
 EnemyScene = ExtResource("5_slime")
 HitFlashMaterial = ExtResource("12_flash")
+SpawnDistance = 22.0
+DespawnDistance = 32.0
 Target = NodePath("../Player")
 
 [node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager")]
 script = ExtResource("9_projectiles")
 EnemyManager = NodePath("../EnemyManager")
-
-[node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager") instance=ExtResource("7_hud")]
-EnemyManager = NodePath("../EnemyManager")
-ProjectileManager = NodePath("../ProjectileManager")
 
 [editable path="Player/Model"]

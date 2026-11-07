@@ -1,0 +1,65 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/GameLayout.cs" id="1_layout"]
+[ext_resource type="PackedScene" path="res://main.tscn" id="2_world"]
+[ext_resource type="Script" path="res://scripts/VirtualJoystick.cs" id="3_joystick"]
+[ext_resource type="PackedScene" path="res://ui/stress_test_hud.tscn" id="4_hud"]
+
+[node name="Game" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_layout")
+GameViewFraction = 1.0
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="GameView" type="TextureRect" parent="Layout"]
+unique_name_in_owner = true
+texture_filter = 1
+clip_contents = true
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="SubViewport" type="SubViewport" parent="Layout/GameView"]
+unique_name_in_owner = true
+size = Vector2i(512, 512)
+render_target_update_mode = 4
+
+[node name="World" parent="Layout/GameView/SubViewport" instance=ExtResource("2_world")]
+
+[node name="ControlPanel" type="ColorRect" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+color = Color(0.09, 0.09, 0.1, 1)
+
+[node name="Joystick" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_joystick")
+
+[node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager") instance=ExtResource("4_hud")]
+EnemyManager = NodePath("../Layout/GameView/SubViewport/World/EnemyManager")
+ProjectileManager = NodePath("../Layout/GameView/SubViewport/World/ProjectileManager")
