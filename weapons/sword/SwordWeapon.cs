@@ -8,7 +8,8 @@ namespace BulletHeavenLike;
 /// a narrow wedge in front of the player (where Player.Forward points).
 ///
 /// The hit happens all at once, on the frame the swing starts. The slash
-/// you see sweeping across the wedge is only a visual that plays out over
+/// you see, a cartoon swoosh whipping from the character's right to their
+/// left (see sword_slash.gdshader), is only a visual that plays out over
 /// SwingDuration. (Hitting enemies one by one as the blade passed would
 /// mean remembering who was already hit across frames, and enemy indices
 /// change between frames; see EnemyManager.Despawn.)
@@ -24,27 +25,30 @@ public partial class SwordWeapon : Node3D
     // Seconds between swings.
     [Export] public float Cooldown = 1.0f;
 
-    // Damage to every enemy in the swing. Slimes have 2 health, so 2 kills
-    // one in a single swing.
-    [Export] public float Damage = 2.0f;
+    // Damage to every enemy in the swing. Slimes have 2 health, so it
+    // takes two swings to kill one.
+    [Export] public float Damage = 1.0f;
 
     // How far the blade reaches from the player's centre, in metres.
     [Export] public float Range = 2.2f;
 
     // Total width of the wedge, in degrees, centred on where the player
-    // faces: 30 means 15 degrees to either side.
-    [Export(PropertyHint.Range, "5,360,1")] public float ArcDegrees = 30.0f;
+    // faces: 120 means 60 degrees to either side.
+    [Export(PropertyHint.Range, "5,360,1")] public float ArcDegrees = 120.0f;
 
     [ExportGroup("Slash visual")]
     // A ShaderMaterial using sword_slash.gdshader (next to this script).
     [Export] public Material SlashMaterial;
-    // Seconds the slash takes to sweep across and fade.
+    // Seconds from the swoosh appearing until it has closed and vanished.
+    // How fast the blade and the tail move within that is set on the
+    // material.
     [Export] public float SwingDuration = 0.18f;
     // Height of the slash above the ground (about the hands).
     [Export] public float SlashHeight = 0.8f;
-    // Where the drawn strip starts, from the player's centre. The blade's
-    // path near the hilt isn't interesting to see.
-    [Export] public float SlashInnerRadius = 0.6f;
+    // Where the strip the swoosh is drawn on starts, from the player's
+    // centre. The swoosh hugs the outer edge (the path of the blade's tip)
+    // and grows inward at most to here.
+    [Export] public float SlashInnerRadius = 0.5f;
 
     // The most enemies one swing can hit. The array is made once and
     // reused, so finding enemies never allocates.
@@ -94,7 +98,8 @@ public partial class SwordWeapon : Node3D
         {
             return;
         }
-        // "+=" keeps the rhythm exact, as in ProjectileTestShooter.
+        // "+=" rather than "= Cooldown" keeps the rhythm exact: if this
+        // frame came a little late, the next swing comes a little sooner.
         _cooldownLeft += Cooldown;
 
         Swing();
@@ -179,7 +184,8 @@ public partial class SwordWeapon : Node3D
     }
 
     /// <summary>
-    /// Builds the slash strip: a flat, curved band covering the wedge,
+    /// Builds the strip the swoosh is drawn on: a flat, curved band
+    /// covering the wedge,
     /// lying on the ground plane (the node lifts it to SlashHeight).
     ///
     ///        outer edge (Range)
@@ -194,8 +200,9 @@ public partial class SwordWeapon : Node3D
     /// </summary>
     private ArrayMesh BuildSlashMesh()
     {
-        // Few segments: the faceted curve suits the low-poly look.
-        const int segments = 8;
+        // Enough segments that the swoosh's curve stays smooth across a wide
+        // arc; it's still only a handful of triangles.
+        const int segments = 24;
         float halfArc = Mathf.DegToRad(ArcDegrees * 0.5f);
 
         Vector3[] vertices = new Vector3[(segments + 1) * 2];

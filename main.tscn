@@ -8,8 +8,6 @@
 [ext_resource type="Script" path="res://enemies/EnemyManager.cs" id="6_enemies"]
 [ext_resource type="Script" path="res://player/FacingDebug.cs" id="8_facing"]
 [ext_resource type="Script" path="res://weapons/projectiles/ProjectileManager.cs" id="9_projectiles"]
-[ext_resource type="Script" path="res://weapons/projectiles/ProjectileTestShooter.cs" id="10_test_shooter"]
-[ext_resource type="Resource" path="res://weapons/projectiles/shard.tres" id="11_shard"]
 [ext_resource type="Material" path="res://core/hit_flash_material.tres" id="12_flash"]
 [ext_resource type="Script" path="res://pickups/XpManager.cs" id="13_xp"]
 [ext_resource type="Material" path="res://pickups/xp_orb_material.tres" id="14_orb"]
@@ -65,12 +63,6 @@ shape = SubResource("CapsuleShape3D_player")
 [node name="FacingDebug" type="MeshInstance3D" parent="Player" node_paths=PackedStringArray("Player")]
 script = ExtResource("8_facing")
 Player = NodePath("..")
-
-[node name="ProjectileTestShooter" type="Node" parent="Player" node_paths=PackedStringArray("Player", "ProjectileManager")]
-script = ExtResource("10_test_shooter")
-Player = NodePath("..")
-ProjectileManager = NodePath("../../ProjectileManager")
-Projectile = ExtResource("11_shard")
 
 [node name="SwordWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager")]
 script = ExtResource("15_sword")
