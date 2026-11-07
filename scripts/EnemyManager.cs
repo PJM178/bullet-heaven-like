@@ -54,6 +54,10 @@ public partial class EnemyManager : Node3D
     [Export] public float StopDistance = 0.7f;
     [Export] public float ArriveSlowdown = 1.0f;
 
+    // Hit points each enemy starts with. A shard does 1 damage, so the
+    // default slime takes three hits.
+    [Export] public float MaxHealth = 2.0f;
+
     // How big an enemy counts as for projectile collisions, in metres on
     // the ground (see HitTest). Roughly the slime's footprint.
     [Export] public float EnemyRadius = 0.25f;
@@ -67,6 +71,8 @@ public partial class EnemyManager : Node3D
     // first _count entries are alive; the rest are spare pool slots. ------
     private Vector3[] _positions;
     private Vector3[] _separation;          // per-frame push from neighbours
+    private float[] _health;
+    private bool[] _dead;                   // killed, removed next step
     private Node3D[] _nodes;
     private AnimationPlayer[] _animationPlayers;
     private int _count;
@@ -91,6 +97,11 @@ public partial class EnemyManager : Node3D
     // How many enemies are alive (read by the HUD).
     public int Count => _count;
 
+    // How many enemies have been killed since the game started (read by
+    // the HUD). "{ get; private set; }" is an auto-property: anyone can
+    // read it, but only this class can change it.
+    public int Kills { get; private set; }
+
     public override void _Ready()
     {
         if (EnemyScene == null || Target == null)
@@ -105,6 +116,8 @@ public partial class EnemyManager : Node3D
         // it's doing it every frame that we avoid.
         _positions = new Vector3[MaxEnemies];
         _separation = new Vector3[MaxEnemies];
+        _health = new float[MaxEnemies];
+        _dead = new bool[MaxEnemies];
         _nodes = new Node3D[MaxEnemies];
         _animationPlayers = new AnimationPlayer[MaxEnemies];
         _enemySlot = new int[MaxEnemies];
@@ -132,6 +145,9 @@ public partial class EnemyManager : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        // Enemies killed during the previous step are removed first, while
+        // nothing else is looking at the arrays (see Damage).
+        RemoveDead();
         UpdatePopulation();
         if (_count == 0)
         {
@@ -205,6 +221,10 @@ public partial class EnemyManager : Node3D
         _count++;
 
         _positions[i] = RandomPointOnSpawnRing();
+        // Pool slots are reused, so reset everything a previous enemy in
+        // this slot may have left behind.
+        _health[i] = MaxHealth;
+        _dead[i] = false;
         _nodes[i].Visible = true;
 
         // Start each enemy at a random point in its cycle so they don't all
@@ -220,7 +240,7 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
-    /// Returns the index of an enemy overlapping the circle at point with
+    /// Returns the index of a live enemy overlapping the circle at point with
     /// the given radius (measured on the ground, height is ignored), or -1
     /// if there is none. Only valid during the current physics step:
     /// enemy indices change when enemies are removed.
@@ -255,6 +275,13 @@ public partial class EnemyManager : Node3D
                 for (int e = start; e < end; e++)
                 {
                     int j = _cellEntries[e];
+                    // Killed earlier this step but not removed yet: it is
+                    // already invisible, so don't let it soak up shots.
+                    if (_dead[j])
+                    {
+                        continue;
+                    }
+
                     float offsetX = _positions[j].X - point.X;
                     float offsetZ = _positions[j].Z - point.Z;
                     if (offsetX * offsetX + offsetZ * offsetZ < reachSquared)
@@ -269,12 +296,61 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
+    /// Deals damage to enemy i (an index from HitTest, used in the same
+    /// physics step). An enemy whose health drops to 0 is marked dead but
+    /// stays in the arrays until the start of the next step. Removing it
+    /// right away would swap another enemy into its slot and leave the grid
+    /// pointing at the wrong enemies while projectiles are still being
+    /// checked against it.
+    /// </summary>
+    public void Damage(int i, float amount)
+    {
+        // Ignore bad indices and enemies that are already dead, so a
+        // second hit in the same step can't count a kill twice.
+        if (i < 0 || i >= _count || _dead[i])
+        {
+            return;
+        }
+
+        _health[i] -= amount;
+        if (_health[i] <= 0.0f)
+        {
+            _dead[i] = true;
+            // Hide it now so it vanishes on the frame it was killed, not
+            // one step later. (Death effects and XP drops will go here.)
+            _nodes[i].Visible = false;
+            Kills++;
+        }
+    }
+
+    /// <summary>
+    /// Removes every enemy marked dead by Damage. With the stress-test
+    /// TargetCount, UpdatePopulation then spawns replacements on the ring.
+    /// </summary>
+    private void RemoveDead()
+    {
+        // Backwards, for the same reason as the projectile loop: Despawn
+        // moves the last enemy into the freed slot, and going from the end
+        // that enemy has already been checked.
+        for (int i = _count - 1; i >= 0; i--)
+        {
+            if (_dead[i])
+            {
+                Despawn(i);
+            }
+        }
+    }
+
+    /// <summary>
     /// Removes enemy i. The last alive enemy is moved into its slot, so the
     /// alive enemies always stay packed at the start of the arrays ("swap
     /// remove"). Fast, but it changes the order: never keep an enemy index
     /// around across frames.
+    ///
+    /// Private, because removing an enemy in the middle of a physics step
+    /// would break the grid. Other code kills enemies through Damage.
     /// </summary>
-    public void Despawn(int i)
+    private void Despawn(int i)
     {
         int last = _count - 1;
 
@@ -285,6 +361,8 @@ public partial class EnemyManager : Node3D
         deadNode.Visible = false;
 
         _positions[i] = _positions[last];
+        _health[i] = _health[last];
+        _dead[i] = _dead[last];
         _nodes[i] = _nodes[last];
         _animationPlayers[i] = _animationPlayers[last];
 

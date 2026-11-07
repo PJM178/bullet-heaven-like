@@ -63,6 +63,7 @@ public partial class StressTestHud : CanvasLayer
         _stats.Text =
             $"FPS {fps:0}\n" +
             $"Enemies {EnemyManager.Count} / {EnemyManager.TargetCount}\n" +
+            $"Kills {EnemyManager.Kills}\n" +
             // "?." returns null instead of crashing if ProjectileManager isn't
             // set, and "?? 0" then substitutes 0 for that null.
             $"Projectiles {ProjectileManager?.Count ?? 0}\n" +

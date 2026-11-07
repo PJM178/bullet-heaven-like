@@ -44,7 +44,7 @@ public partial class ProjectileManager : Node3D
     private Vector3[] _positions;
     private Vector3[] _velocities;   // metres per second, direction * speed
     private float[] _timeLeft;       // seconds until it disappears
-    private float[] _damage;         // copied now, used once damage exists
+    private float[] _damage;         // dealt to the enemy it hits
     private float[] _radius;         // hit radius on the ground
     private MeshInstance3D[] _nodes;
     private int _count;
@@ -149,9 +149,8 @@ public partial class ProjectileManager : Node3D
                 int hit = EnemyManager.HitTest(_positions[i], _radius[i]);
                 if (hit >= 0)
                 {
-                    // For now a hit just stops the projectile; the enemy is
-                    // untouched. Damage comes next, and pierce would mean
-                    // counting down here instead of despawning.
+                    EnemyManager.Damage(hit, _damage[i]);
+                    // Pierce would go here: count down instead of despawning.
                     Despawn(i);
                     continue;
                 }
