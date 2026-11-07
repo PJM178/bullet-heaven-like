@@ -50,15 +50,30 @@ size_flags_vertical = 3
 mouse_filter = 2
 color = Color(0.09, 0.09, 0.1, 1)
 
-[node name="Joystick" type="Control" parent="."]
+[node name="MoveStick" type="Control" parent="."]
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
+anchors_preset = 9
+anchor_right = 0.5
 anchor_bottom = 1.0
-grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("3_joystick")
+
+[node name="AimStick" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 0.5
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_joystick")
+LeftAction = &"aim_left"
+RightAction = &"aim_right"
+UpAction = &"aim_up"
+DownAction = &"aim_down"
+KnobColor = Color(1, 0.75, 0.6, 0.55)
 
 [node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager") instance=ExtResource("4_hud")]
 EnemyManager = NodePath("../Layout/GameView/SubViewport/World/EnemyManager")

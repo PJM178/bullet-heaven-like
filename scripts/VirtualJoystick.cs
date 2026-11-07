@@ -4,15 +4,19 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// A floating on-screen joystick. Put a finger down anywhere inside this
-/// control (in game.tscn it covers the whole screen) and the joystick
-/// appears under it; drag to steer, lift to stop. Buttons win: a touch
-/// that lands on a button presses the button and doesn't start the
-/// joystick.
+/// control and the joystick appears under it; drag to steer, lift to
+/// stop. Buttons win: a touch that lands on a button presses the button
+/// and doesn't start the joystick.
 ///
-/// It doesn't move the player itself. It presses the same input actions
-/// as the arrow keys (move_left, move_right, ...), with a strength between
-/// 0 and 1, so Player reads it through Input.GetVector exactly like the
-/// keyboard and needs no changes. Keyboard input keeps working alongside.
+/// game.tscn has two of these: MoveStick on the left half of the screen
+/// and AimStick on the right half. They are the same script; only the
+/// four actions they press differ (see LeftAction etc.).
+///
+/// It doesn't move the player itself. It presses input actions (by
+/// default the same ones as the movement keys: move_left, move_right, ...)
+/// with a strength between 0 and 1, so Player reads it through
+/// Input.GetVector exactly like the keyboard. Keyboard input keeps
+/// working alongside.
 ///
 /// On the desktop, project setting "Emulate Touch From Mouse" turns mouse
 /// clicks into touches, so the joystick can be tested with the mouse.
@@ -30,16 +34,18 @@ public partial class VirtualJoystick : Control
     // that wobbles slightly doesn't make the player creep around.
     [Export(PropertyHint.Range, "0,0.9,0.05")] public float DeadZone = 0.15f;
 
+    // The actions this stick presses. The move stick keeps the defaults;
+    // the aim stick sets them to aim_left, aim_right, ... in game.tscn.
+    // StringName is Godot's fast string type for names like these; the
+    // values are created once, not on every drag event.
+    [Export] public StringName LeftAction = "move_left";
+    [Export] public StringName RightAction = "move_right";
+    [Export] public StringName UpAction = "move_up";
+    [Export] public StringName DownAction = "move_down";
+
     [Export] public Color BaseColor = new(1.0f, 1.0f, 1.0f, 0.12f);
     [Export] public Color RingColor = new(1.0f, 1.0f, 1.0f, 0.35f);
     [Export] public Color KnobColor = new(1.0f, 1.0f, 1.0f, 0.55f);
-
-    // The action names, created once so pressing them every drag event
-    // doesn't build new StringNames.
-    private static readonly StringName MoveLeft = "move_left";
-    private static readonly StringName MoveRight = "move_right";
-    private static readonly StringName MoveUp = "move_up";
-    private static readonly StringName MoveDown = "move_down";
 
     // Several fingers can touch the screen at once, and Godot numbers them
     // (Index). We follow only the finger that started the joystick, so a
@@ -143,20 +149,21 @@ public partial class VirtualJoystick : Control
         Vector2 offset = _knob - _center;
         Vector2 direction = Vector2.Zero;
 
-        // Outside the dead zone the player runs at full speed in the
+        // Outside the dead zone the output is always full strength in the
         // stick's direction: the stick only steers. ("Normalized" makes
-        // the vector length 1.) Most bullet heavens play like this, since
-        // dodging needs full speed, not careful creeping.
+        // the vector length 1.) For the move stick that means full speed;
+        // most bullet heavens play like this, since dodging needs full
+        // speed, not careful creeping. The aim stick only needs a direction.
         if (offset.Length() > Radius * DeadZone)
         {
             direction = offset.Normalized();
         }
 
         // Screen y grows downwards, so a negative y means "up".
-        SetAction(MoveRight, Mathf.Max(direction.X, 0.0f));
-        SetAction(MoveLeft, Mathf.Max(-direction.X, 0.0f));
-        SetAction(MoveDown, Mathf.Max(direction.Y, 0.0f));
-        SetAction(MoveUp, Mathf.Max(-direction.Y, 0.0f));
+        SetAction(RightAction, Mathf.Max(direction.X, 0.0f));
+        SetAction(LeftAction, Mathf.Max(-direction.X, 0.0f));
+        SetAction(DownAction, Mathf.Max(direction.Y, 0.0f));
+        SetAction(UpAction, Mathf.Max(-direction.Y, 0.0f));
     }
 
     /// <summary>
@@ -182,10 +189,10 @@ public partial class VirtualJoystick : Control
         }
 
         _fingerIndex = -1;
-        Input.ActionRelease(MoveLeft);
-        Input.ActionRelease(MoveRight);
-        Input.ActionRelease(MoveUp);
-        Input.ActionRelease(MoveDown);
+        Input.ActionRelease(LeftAction);
+        Input.ActionRelease(RightAction);
+        Input.ActionRelease(UpAction);
+        Input.ActionRelease(DownAction);
         QueueRedraw();
     }
 

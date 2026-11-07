@@ -57,6 +57,43 @@ public partial class GameLayout : Control
     }
 
     /// <summary>
+    /// Passes mouse movement on to the 3D world, so the player can face
+    /// the cursor.
+    ///
+    /// A SubViewport shown through a TextureRect gets no input on its own
+    /// (only a SubViewportContainer forwards it automatically). So we
+    /// convert the mouse position from screen coordinates into the
+    /// SubViewport's own pixels and push the event in by hand. Nodes in the
+    /// world (Player) then receive it in their _Input.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is not InputEventMouseMotion)
+        {
+            return;
+        }
+
+        Vector2 viewSize = _gameView.Size;
+        if (viewSize.X < 1.0f || viewSize.Y < 1.0f)
+        {
+            return;
+        }
+
+        // Screen -> GameView local coordinates (the inverse of "local ->
+        // screen"), then scale up or down to the SubViewport's resolution.
+        // The SubViewport has the same shape as the view (UpdateRenderSize),
+        // so a plain scale is enough.
+        Vector2 scale = (Vector2)_subViewport.Size / viewSize;
+        Transform2D screenToWorldView =
+            Transform2D.Identity.Scaled(scale) * _gameView.GetGlobalTransformWithCanvas().AffineInverse();
+
+        // XformedBy returns a copy of the event with its position moved,
+        // so the original event is left untouched for the rest of the UI.
+        // "true" tells PushInput the position is already in its coordinates.
+        _subViewport.PushInput(@event.XformedBy(screenToWorldView), true);
+    }
+
+    /// <summary>
     /// Makes the SubViewport the same shape as the game view, so the
     /// picture fills it without stretching.
     /// </summary>

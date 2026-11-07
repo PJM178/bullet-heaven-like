@@ -6,8 +6,15 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// The player character. Moves along the ground in the screen direction of
-/// the move_left / move_right / move_up / move_down actions (the arrow keys),
-/// turns to face where it's going, and plays the run or idle animation.
+/// the move_left / move_right / move_up / move_down actions (WASD, the arrow
+/// keys or the left-hand stick) and plays the run or idle animation.
+///
+/// Facing (which is also where weapons fire, see Forward) is chosen in
+/// this order:
+///   1. the aim actions (aim_left, ...), pressed by the right-hand stick;
+///   2. on desktop, the mouse cursor: the character faces the point on
+///      the ground under it;
+///   3. otherwise the direction it is moving.
 /// </summary>
 // "partial" is required by Godot: its source generator writes the other half
 // of this class (the glue that connects C# to the engine).
@@ -34,6 +41,14 @@ public partial class Player : CharacterBody3D
     // avoids converting a C# string to a StringName every frame.
     private static readonly StringName RunAnimation = "run";
     private static readonly StringName IdleAnimation = "idle";
+    private static readonly StringName MoveLeft = "move_left";
+    private static readonly StringName MoveRight = "move_right";
+    private static readonly StringName MoveUp = "move_up";
+    private static readonly StringName MoveDown = "move_down";
+    private static readonly StringName AimLeft = "aim_left";
+    private static readonly StringName AimRight = "aim_right";
+    private static readonly StringName AimUp = "aim_up";
+    private static readonly StringName AimDown = "aim_down";
 
     // The imported model (a child node) and the AnimationPlayer that came
     // with it. We rotate only the model, not the whole body, so the
@@ -52,6 +67,14 @@ public partial class Player : CharacterBody3D
     // *screen*, not along the world X axis. The camera is rotated 45°,
     // so those two directions are different.
     private Camera3D _camera;
+
+    // Mouse aiming (desktop only). The latest mouse position, in the 3D
+    // view's own pixels (GameLayout passes the mouse events in), and
+    // whether the mouse has moved at all yet. Until it has, the character
+    // faces its movement direction as on the phone.
+    private bool _mouseAimEnabled;
+    private bool _hasMousePosition;
+    private Vector2 _mousePosition;
 
     // ---- Facing: the character's own frame of reference ------------------
     // Weapons (and anything else that cares about "in front of" or "behind"
@@ -106,12 +129,27 @@ public partial class Player : CharacterBody3D
     {
         _camera = GetViewport().GetCamera3D();
 
+        // On Android, Godot turns every touch into a fake mouse event too
+        // ("Emulate Mouse From Touch"), so the cursor would jump to the
+        // joystick fingers. Only aim with the mouse on desktop.
+        _mouseAimEnabled = !OS.HasFeature("mobile");
+
         // GetNode<T> finds a node by its path relative to this one and casts
         // it to the given type. The AnimationPlayer lives inside the
         // imported player.glb scene, which is instanced as "Model".
         _model = GetNode<Node3D>("Model");
         _animationPlayer = GetNode<AnimationPlayer>("Model/AnimationPlayer");
         _animationPlayer.Play(IdleAnimation);
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        // Pattern matching again: only mouse movement is interesting here.
+        if (_mouseAimEnabled && @event is InputEventMouseMotion motion)
+        {
+            _mousePosition = motion.Position;
+            _hasMousePosition = true;
+        }
     }
 
     // _PhysicsProcess runs at a fixed rate (60 times per second by default),
@@ -153,11 +191,8 @@ public partial class Player : CharacterBody3D
         // It also normalizes diagonals, so holding Up + Right isn't ~41%
         // faster than holding just one key. (Vector2 and Vector3 are structs,
         // value types, so creating them every frame doesn't allocate memory.)
-        Vector2 input = Input.GetVector("move_left", "move_right", "move_up", "move_down");
-
-        // Turn the 2D screen input into a 3D direction on the ground.
-        // Screen "down" (+y) is the opposite of screen "up", hence the minus.
-        Vector3 direction = ScreenRightOnGround() * input.X - ScreenUpOnGround() * input.Y;
+        Vector2 input = Input.GetVector(MoveLeft, MoveRight, MoveUp, MoveDown);
+        Vector3 direction = ScreenToGround(input);
 
         // Velocity is a property of CharacterBody3D. MoveAndSlide() moves the
         // body by Velocity * delta itself, so we don't multiply by delta here.
@@ -165,11 +200,82 @@ public partial class Player : CharacterBody3D
         MoveAndSlide();
 
         bool isMoving = direction.LengthSquared() > 0.0001f;
-        if (isMoving)
+
+        // "out" lets a method hand back an extra value besides its return
+        // value: here, whether something is aiming (the bool) and where.
+        if (TryGetAim(out Vector3 aim))
+        {
+            // An aim of zero means "keep facing as you are" (the cursor is
+            // right on top of the character), so don't turn.
+            if (aim.LengthSquared() > 0.0001f)
+            {
+                FaceDirection(aim, (float)delta);
+            }
+        }
+        else if (isMoving)
         {
             FaceDirection(direction, (float)delta);
         }
         UpdateAnimation(isMoving);
+    }
+
+    /// <summary>
+    /// Works out where the player wants to face, if anything is aiming.
+    /// Returns false when nothing is, so the caller falls back to the
+    /// movement direction.
+    /// </summary>
+    private bool TryGetAim(out Vector3 aim)
+    {
+        // 1. The aim stick has priority. On desktop, dragging it with the
+        // mouse also moves the cursor, and the stick should win then.
+        Vector2 stick = Input.GetVector(AimLeft, AimRight, AimUp, AimDown);
+        if (stick.LengthSquared() > 0.0f)
+        {
+            aim = ScreenToGround(stick);
+            return true;
+        }
+
+        // 2. The mouse: shoot a ray from the camera through the cursor and
+        // see where it hits the ground plane the character stands on.
+        if (_mouseAimEnabled && _hasMousePosition)
+        {
+            Vector3 rayStart = _camera.ProjectRayOrigin(_mousePosition);
+            Vector3 rayDirection = _camera.ProjectRayNormal(_mousePosition);
+            Plane ground = new(Vector3.Up, GlobalPosition.Y);
+
+            // "Vector3?" is a nullable Vector3: either a value or null.
+            // IntersectsRay returns null when the ray misses the plane
+            // (e.g. pointing at the sky), which can't happen with our
+            // downward camera, but we still check.
+            Vector3? hit = ground.IntersectsRay(rayStart, rayDirection);
+            aim = Vector3.Zero;
+            if (hit.HasValue)
+            {
+                Vector3 toCursor = hit.Value - GlobalPosition;
+                toCursor.Y = 0.0f;
+                // Ignore a cursor almost on top of the character, where a
+                // tiny mouse movement would spin it around.
+                if (toCursor.LengthSquared() > 0.04f)
+                {
+                    aim = toCursor.Normalized();
+                }
+            }
+            return true;
+        }
+
+        // 3. Nothing is aiming. "out" parameters must always be set.
+        aim = Vector3.Zero;
+        return false;
+    }
+
+    /// <summary>
+    /// Turns a 2D screen direction (x right, y down, like the input
+    /// vectors) into a 3D direction on the ground.
+    /// </summary>
+    private Vector3 ScreenToGround(Vector2 screen)
+    {
+        // Screen "down" (+y) is the opposite of screen "up", hence the minus.
+        return ScreenRightOnGround() * screen.X - ScreenUpOnGround() * screen.Y;
     }
 
     /// <summary>
