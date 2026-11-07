@@ -65,7 +65,16 @@ public partial class EnemyManager : Node3D
     // Stepped, PS1-style animation rate (see Player.AnimationFps).
     [Export] public float AnimationFps = 12.0f;
 
+    // How long an enemy flashes white after being hit, in seconds. It
+    // starts fully white and fades back to normal over this time.
+    [Export] public float HitFlashDuration = 0.12f;
+
     private static readonly StringName MoveAnimation = "move";
+
+    // The "instance uniform" in shaders/ps1_vertex_color.gdshader. Stored
+    // as a StringName once, so setting it every frame doesn't build a new
+    // name each time.
+    private static readonly StringName HitFlashParameter = "hit_flash";
 
     // ---- Enemy data. Index i in every array is the same enemy. Only the
     // first _count entries are alive; the rest are spare pool slots. ------
@@ -73,8 +82,14 @@ public partial class EnemyManager : Node3D
     private Vector3[] _separation;          // per-frame push from neighbours
     private float[] _health;
     private bool[] _dead;                   // killed, removed next step
+    private float[] _flashTime;             // seconds of hit flash left
     private Node3D[] _nodes;
     private AnimationPlayer[] _animationPlayers;
+    // Every mesh node in each enemy, so the flash can be set on all of
+    // them. "GeometryInstance3D[][]" is an array of arrays: one small
+    // array per enemy, because a model can be made of several meshes
+    // (e.g. a modular character's body, clothes and hair).
+    private GeometryInstance3D[][] _meshes;
     private int _count;
 
     // ---- Spatial grid (see BuildGrid). -----------------------------------
@@ -118,8 +133,10 @@ public partial class EnemyManager : Node3D
         _separation = new Vector3[MaxEnemies];
         _health = new float[MaxEnemies];
         _dead = new bool[MaxEnemies];
+        _flashTime = new float[MaxEnemies];
         _nodes = new Node3D[MaxEnemies];
         _animationPlayers = new AnimationPlayer[MaxEnemies];
+        _meshes = new GeometryInstance3D[MaxEnemies][];
         _enemySlot = new int[MaxEnemies];
         _cellEntries = new int[MaxEnemies];
         _cellStart = new int[GridTableSize];
@@ -140,7 +157,29 @@ public partial class EnemyManager : Node3D
 
             _nodes[i] = node;
             _animationPlayers[i] = animationPlayer;
+            _meshes[i] = FindMeshes(node);
         }
+    }
+
+    /// <summary>
+    /// Collects every mesh node under an enemy, at any depth. Only called
+    /// in _Ready: it allocates, which is fine once but not every frame.
+    /// </summary>
+    private static GeometryInstance3D[] FindMeshes(Node root)
+    {
+        // FindChildren(pattern, type, recursive, owned). "*" matches any
+        // name, and owned: false is needed because the nodes inside an
+        // imported .glb model belong to that model's scene, not ours.
+        Godot.Collections.Array<Node> found = root.FindChildren("*", "GeometryInstance3D", true, false);
+
+        GeometryInstance3D[] meshes = new GeometryInstance3D[found.Count];
+        for (int m = 0; m < found.Count; m++)
+        {
+            // "(Type)value" is a cast: we know these nodes are
+            // GeometryInstance3D because that's what we searched for.
+            meshes[m] = (GeometryInstance3D)found[m];
+        }
+        return meshes;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -166,6 +205,48 @@ public partial class EnemyManager : Node3D
     }
 
     public override void _Process(double delta)
+    {
+        // Visual-only updates live in _Process (every rendered frame)
+        // rather than _PhysicsProcess, so they look smooth at any frame rate.
+        UpdateHitFlash((float)delta);
+        AdvanceAnimations(delta);
+    }
+
+    /// <summary>
+    /// Fades out the hit flash on enemies that were hit recently. Enemies
+    /// that aren't flashing are skipped after one comparison, so a swarm
+    /// that isn't being hit costs almost nothing here.
+    /// </summary>
+    private void UpdateHitFlash(float delta)
+    {
+        for (int i = 0; i < _count; i++)
+        {
+            if (_flashTime[i] <= 0.0f)
+            {
+                continue;
+            }
+
+            // Math.Max keeps it from going below 0, so the last update
+            // sets the flash to exactly 0 (fully back to normal).
+            _flashTime[i] = Math.Max(_flashTime[i] - delta, 0.0f);
+            SetHitFlash(i, _flashTime[i] / HitFlashDuration);
+        }
+    }
+
+    /// <summary>
+    /// Sets how white enemy i is drawn (0 = normal, 1 = white) on all of
+    /// its meshes.
+    /// </summary>
+    private void SetHitFlash(int i, float amount)
+    {
+        GeometryInstance3D[] meshes = _meshes[i];
+        for (int m = 0; m < meshes.Length; m++)
+        {
+            meshes[m].SetInstanceShaderParameter(HitFlashParameter, amount);
+        }
+    }
+
+    private void AdvanceAnimations(double delta)
     {
         // Same stepped animation idea as Player._Process, but one clock
         // drives every enemy, so they all update on the same beat.
@@ -225,6 +306,12 @@ public partial class EnemyManager : Node3D
         // this slot may have left behind.
         _health[i] = MaxHealth;
         _dead[i] = false;
+        // A previous enemy in this slot may have died mid-flash.
+        if (_flashTime[i] > 0.0f)
+        {
+            _flashTime[i] = 0.0f;
+            SetHitFlash(i, 0.0f);
+        }
         _nodes[i].Visible = true;
 
         // Start each enemy at a random point in its cycle so they don't all
@@ -313,6 +400,14 @@ public partial class EnemyManager : Node3D
         }
 
         _health[i] -= amount;
+
+        // Start (or restart) the white flash; UpdateHitFlash fades it.
+        if (HitFlashDuration > 0.0f)
+        {
+            _flashTime[i] = HitFlashDuration;
+            SetHitFlash(i, 1.0f);
+        }
+
         if (_health[i] <= 0.0f)
         {
             _dead[i] = true;
@@ -358,16 +453,24 @@ public partial class EnemyManager : Node3D
         // AnimationPlayer along with the data so every array stays lined up.
         Node3D deadNode = _nodes[i];
         AnimationPlayer deadPlayer = _animationPlayers[i];
+        GeometryInstance3D[] deadMeshes = _meshes[i];
+        float deadFlash = _flashTime[i];
         deadNode.Visible = false;
 
         _positions[i] = _positions[last];
         _health[i] = _health[last];
         _dead[i] = _dead[last];
+        _flashTime[i] = _flashTime[last];
         _nodes[i] = _nodes[last];
         _animationPlayers[i] = _animationPlayers[last];
+        _meshes[i] = _meshes[last];
 
+        // The flash belongs to the node, so it travels with it: the dead
+        // node keeps its flash time in the parked slot and Spawn clears it.
+        _flashTime[last] = deadFlash;
         _nodes[last] = deadNode;
         _animationPlayers[last] = deadPlayer;
+        _meshes[last] = deadMeshes;
         _count--;
     }
 

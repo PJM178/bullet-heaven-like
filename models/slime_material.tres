@@ -1,7 +1,8 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/ps1_vertex_color.gdshader" id="1_shader"]
 
 [resource]
 resource_name = "SlimeMat"
-vertex_color_use_as_albedo = true
-roughness = 1.0
-metallic_specular = 0.0
+render_priority = 0
+shader = ExtResource("1_shader")
