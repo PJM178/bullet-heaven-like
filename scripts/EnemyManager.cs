@@ -58,6 +58,11 @@ public partial class EnemyManager : Node3D
     // default slime takes three hits.
     [Export] public float MaxHealth = 2.0f;
 
+    // Where killed enemies drop their experience, and how much each is
+    // worth. Without an XpManager, kills just drop nothing.
+    [Export] public XpManager XpManager;
+    [Export] public int XpPerKill = 100;
+
     // How big an enemy counts as for projectile collisions, in metres on
     // the ground (see HitTest). Roughly the slime's footprint.
     [Export] public float EnemyRadius = 0.25f;
@@ -424,9 +429,12 @@ public partial class EnemyManager : Node3D
         {
             _dead[i] = true;
             // Hide it now so it vanishes on the frame it was killed, not
-            // one step later. (Death effects and XP drops will go here.)
+            // one step later. (Death effects will go here too.)
             _nodes[i].Visible = false;
             Kills++;
+
+            // "?." calls Drop only if XpManager is set (not null).
+            XpManager?.Drop(_positions[i], XpPerKill);
         }
     }
 

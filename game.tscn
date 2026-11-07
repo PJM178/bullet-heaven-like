@@ -75,6 +75,8 @@ UpAction = &"aim_up"
 DownAction = &"aim_down"
 KnobColor = Color(1, 0.75, 0.6, 0.55)
 
-[node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager") instance=ExtResource("4_hud")]
+[node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager", "XpManager", "Player") instance=ExtResource("4_hud")]
 EnemyManager = NodePath("../Layout/GameView/SubViewport/World/EnemyManager")
 ProjectileManager = NodePath("../Layout/GameView/SubViewport/World/ProjectileManager")
+XpManager = NodePath("../Layout/GameView/SubViewport/World/XpManager")
+Player = NodePath("../Layout/GameView/SubViewport/World/Player")

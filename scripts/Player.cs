@@ -88,6 +88,19 @@ public partial class Player : CharacterBody3D
     private bool _hasMousePosition;
     private Vector2 _mousePosition;
 
+    /// <summary>
+    /// Experience collected so far (from XP orbs, see XpManager). Levels
+    /// and upgrades will be built on top of this.
+    /// "{ get; private set; }" is an auto-property: anyone can read it, but
+    /// only Player can change it, through AddExperience.
+    /// </summary>
+    public int Experience { get; private set; }
+
+    public void AddExperience(int amount)
+    {
+        Experience += amount;
+    }
+
     // ---- Facing: the character's own frame of reference ------------------
     // Weapons (and anything else that cares about "in front of" or "behind"
     // the player) describe directions as an angle around the character,
