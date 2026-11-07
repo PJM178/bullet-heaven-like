@@ -65,16 +65,15 @@ public partial class EnemyManager : Node3D
     // Stepped, PS1-style animation rate (see Player.AnimationFps).
     [Export] public float AnimationFps = 12.0f;
 
-    // How long an enemy flashes white after being hit, in seconds. It
-    // starts fully white and fades back to normal over this time.
+    // How long an enemy flashes white after being hit, in seconds.
     [Export] public float HitFlashDuration = 0.12f;
 
-    private static readonly StringName MoveAnimation = "move";
+    // The material a hit enemy is drawn with while it flashes
+    // (shaders/hit_flash_material.tres). One material shared by every
+    // enemy; leave it empty to turn the flash off.
+    [Export] public Material HitFlashMaterial;
 
-    // The "instance uniform" in shaders/ps1_vertex_color.gdshader. Stored
-    // as a StringName once, so setting it every frame doesn't build a new
-    // name each time.
-    private static readonly StringName HitFlashParameter = "hit_flash";
+    private static readonly StringName MoveAnimation = "move";
 
     // ---- Enemy data. Index i in every array is the same enemy. Only the
     // first _count entries are alive; the rest are spare pool slots. ------
@@ -213,9 +212,10 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
-    /// Fades out the hit flash on enemies that were hit recently. Enemies
-    /// that aren't flashing are skipped after one comparison, so a swarm
-    /// that isn't being hit costs almost nothing here.
+    /// Counts down the hit flash on enemies that were hit recently and
+    /// ends it when the time runs out. Enemies that aren't flashing are
+    /// skipped after one comparison, so a swarm that isn't being hit costs
+    /// almost nothing here.
     /// </summary>
     private void UpdateHitFlash(float delta)
     {
@@ -226,23 +226,31 @@ public partial class EnemyManager : Node3D
                 continue;
             }
 
-            // Math.Max keeps it from going below 0, so the last update
-            // sets the flash to exactly 0 (fully back to normal).
-            _flashTime[i] = Math.Max(_flashTime[i] - delta, 0.0f);
-            SetHitFlash(i, _flashTime[i] / HitFlashDuration);
+            _flashTime[i] -= delta;
+            if (_flashTime[i] <= 0.0f)
+            {
+                _flashTime[i] = 0.0f;
+                SetHitFlash(i, false);
+            }
         }
     }
 
     /// <summary>
-    /// Sets how white enemy i is drawn (0 = normal, 1 = white) on all of
-    /// its meshes.
+    /// Turns the white flash on or off for all of enemy i's meshes.
+    ///
+    /// MaterialOverride replaces the mesh's own material(s) while it is set;
+    /// setting it back to null brings the normal look back. Swapping in one
+    /// shared material works for any number of enemies. (We first tried a
+    /// per-mesh "instance uniform", but phones like the Adreno 642L only
+    /// have room for about 256 of those in the whole game.)
     /// </summary>
-    private void SetHitFlash(int i, float amount)
+    private void SetHitFlash(int i, bool on)
     {
+        Material material = on ? HitFlashMaterial : null;
         GeometryInstance3D[] meshes = _meshes[i];
         for (int m = 0; m < meshes.Length; m++)
         {
-            meshes[m].SetInstanceShaderParameter(HitFlashParameter, amount);
+            meshes[m].MaterialOverride = material;
         }
     }
 
@@ -310,7 +318,7 @@ public partial class EnemyManager : Node3D
         if (_flashTime[i] > 0.0f)
         {
             _flashTime[i] = 0.0f;
-            SetHitFlash(i, 0.0f);
+            SetHitFlash(i, false);
         }
         _nodes[i].Visible = true;
 
@@ -401,11 +409,15 @@ public partial class EnemyManager : Node3D
 
         _health[i] -= amount;
 
-        // Start (or restart) the white flash; UpdateHitFlash fades it.
-        if (HitFlashDuration > 0.0f)
+        // Start (or restart) the white flash; UpdateHitFlash ends it. Only
+        // swap the material if it isn't already flashing.
+        if (HitFlashMaterial != null && HitFlashDuration > 0.0f)
         {
+            if (_flashTime[i] <= 0.0f)
+            {
+                SetHitFlash(i, true);
+            }
             _flashTime[i] = HitFlashDuration;
-            SetHitFlash(i, 1.0f);
         }
 
         if (_health[i] <= 0.0f)

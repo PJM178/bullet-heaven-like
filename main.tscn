@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/ProjectileManager.cs" id="9_projectiles"]
 [ext_resource type="Script" path="res://scripts/ProjectileTestShooter.cs" id="10_test_shooter"]
 [ext_resource type="Resource" path="res://projectiles/shard.tres" id="11_shard"]
+[ext_resource type="Material" path="res://shaders/hit_flash_material.tres" id="12_flash"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -75,6 +76,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
 [node name="EnemyManager" type="Node3D" parent="." node_paths=PackedStringArray("Target")]
 script = ExtResource("6_enemies")
 EnemyScene = ExtResource("5_slime")
+HitFlashMaterial = ExtResource("12_flash")
 Target = NodePath("../Player")
 
 [node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager")]

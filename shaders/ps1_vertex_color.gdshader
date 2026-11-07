@@ -16,13 +16,16 @@ shader_type spatial;
 // value as a normal (sRGB) colour.
 uniform vec4 tint : source_color = vec4(1.0);
 
-// How white the model is drawn: 0 = normal, 1 = fully white.
+// How white the model is drawn: 0 = normal, 1 = fully white. Normal
+// materials leave it at 0. shaders/hit_flash_material.tres sets it to 1,
+// and code swaps that material onto a model while it flashes (see
+// EnemyManager.SetHitFlash). Using this same shader for the flash means
+// the PS1 effects added here later apply to flashing models too.
 //
-// "instance uniform" is the important part: the material is shared, but
-// every mesh node on screen keeps its own copy of this one value. Code
-// sets it per node with SetInstanceShaderParameter("hit_flash", value),
-// so one slime can flash without giving it a material of its own.
-instance uniform float hit_flash = 0.0;
+// (This is a plain uniform, one value per material. A per-mesh
+// "instance uniform" would avoid the material swap, but phones such as
+// the Adreno 642L only fit about 256 of those in the whole game.)
+uniform float hit_flash : hint_range(0.0, 1.0) = 0.0;
 
 void fragment() {
 	// COLOR is the vertex colour, blended across the triangle.
