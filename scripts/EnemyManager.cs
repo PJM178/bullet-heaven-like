@@ -340,6 +340,75 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
+    /// Ground position of live enemy i. Like every enemy index, only valid
+    /// during the current physics step.
+    /// </summary>
+    public Vector3 GetPosition(int i) => _positions[i];
+
+    /// <summary>
+    /// Finds every live enemy overlapping the circle at point with the given
+    /// radius (on the ground, height ignored) and writes their indices into
+    /// results. Returns how many it found, at most results.Length.
+    ///
+    /// The caller owns the results array and reuses it every call, so a
+    /// query allocates nothing. Indices are only valid during the current
+    /// physics step, so use them right away.
+    /// </summary>
+    public int QueryCircle(Vector3 point, float radius, int[] results)
+    {
+        int found = 0;
+        float reach = radius + EnemyRadius;
+        float reachSquared = reach * reach;
+        int cellRange = Mathf.CeilToInt(reach / SeparationRadius);
+        int cellX = CellCoord(point.X);
+        int cellZ = CellCoord(point.Z);
+
+        for (int dz = -cellRange; dz <= cellRange; dz++)
+        {
+            for (int dx = -cellRange; dx <= cellRange; dx++)
+            {
+                int slot = CellSlot(cellX + dx, cellZ + dz);
+                int start = _cellStart[slot];
+                int end = start + _cellCount[slot];
+
+                for (int e = start; e < end; e++)
+                {
+                    int j = _cellEntries[e];
+                    if (_dead[j])
+                    {
+                        continue;
+                    }
+
+                    float offsetX = _positions[j].X - point.X;
+                    float offsetZ = _positions[j].Z - point.Z;
+                    if (offsetX * offsetX + offsetZ * offsetZ >= reachSquared)
+                    {
+                        continue;
+                    }
+
+                    // Two far-apart cells can share a slot in the hash table
+                    // (see CellSlot), so a wide search can visit the same
+                    // slot twice and meet the same enemy again. Skip repeats.
+                    // The list is short, so a plain search is fine.
+                    if (Array.IndexOf(results, j, 0, found) >= 0)
+                    {
+                        continue;
+                    }
+
+                    results[found] = j;
+                    found++;
+                    if (found == results.Length)
+                    {
+                        return found; // buffer full
+                    }
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Returns the index of a live enemy overlapping the circle at point with
     /// the given radius (measured on the ground, height is ignored), or -1
     /// if there is none. Only valid during the current physics step:

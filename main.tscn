@@ -13,6 +13,8 @@
 [ext_resource type="Material" path="res://shaders/hit_flash_material.tres" id="12_flash"]
 [ext_resource type="Script" path="res://scripts/XpManager.cs" id="13_xp"]
 [ext_resource type="Material" path="res://pickups/xp_orb_material.tres" id="14_orb"]
+[ext_resource type="Script" path="res://scripts/SwordWeapon.cs" id="15_sword"]
+[ext_resource type="Material" path="res://weapons/sword_slash_material.tres" id="16_slash"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -69,6 +71,12 @@ script = ExtResource("10_test_shooter")
 Player = NodePath("..")
 ProjectileManager = NodePath("../../ProjectileManager")
 Projectile = ExtResource("11_shard")
+
+[node name="SwordWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager")]
+script = ExtResource("15_sword")
+Player = NodePath("..")
+EnemyManager = NodePath("../../EnemyManager")
+SlashMaterial = ExtResource("16_slash")
 
 [node name="Bush" parent="." instance=ExtResource("4_bush")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
