@@ -376,6 +376,167 @@ RUN_KEYS = [
     (16, RUN_CONTACT),  # same as frame 0, so the loop is seamless
 ]
 
+# ---- Directional locomotion ---------------------------------------------
+#
+# While aiming, the character can move in any direction relative to where
+# it faces. Godot blends these clips by direction (forward = run, back =
+# run_back, sideways = strafe_*), so they must all share the run's timing:
+# 16 frames, LEFT foot plants at frame 0, RIGHT foot at frame 8. If the
+# feet landed at different moments, a diagonal blend would scramble them.
+#
+# In all of them the upper body stays squared to the front with the arms in
+# a guard: the character is facing what it's fighting.
+
+
+def shift_keys(keys, offset, length=16):
+    """Move a looping cycle's keys later by `offset` frames, wrapping round,
+    so the cycle starts from a different point (used to keep foot timing in
+    step after mirroring a clip)."""
+    shifted = sorted(((f + offset) % length, pose) for f, pose in keys[:-1])
+    return shifted + [(length, shifted[0][1])]
+
+
+# ---- Backpedal: retreating step by step without turning away. Shorter,
+# controlled steps than the run, landing on the ball of the foot behind;
+# torso upright with a slight forward brace, fists up. --------------------
+
+BACK_CONTACT = {  # left foot reaches back and lands on its toes
+    "_loc": (0, 0, -0.05),
+    "hips": [("Z", 6)],
+    "spine": [("X", 6), ("Z", -3)],
+    "chest": [("X", 4), ("Z", -5)],
+    "neck": [("X", -4)],
+    "head": [("X", -4), ("Z", 4)],
+    "thigh.L": [("X", 22)],
+    "shin.L": [("X", 20)],
+    "foot.L": [("X", 15)],
+    "thigh.R": [("X", -22)],
+    "shin.R": [("X", 15)],
+    "foot.R": [("X", -10)],
+    # Opposite arm to leg, as in any gait, but a small guarded swing.
+    "upper_arm.L": [("Y", -10), ("X", -30)],
+    "forearm.L": [("X", -80)],
+    "upper_arm.R": [("Y", 10), ("X", 15)],
+    "forearm.R": [("X", -65)],
+}
+
+BACK_PASS = {  # weight over the left foot, right leg lifts and swings back
+    "_loc": (0, 0, -0.03),
+    "spine": [("X", 7)],
+    "chest": [("X", 4)],
+    "neck": [("X", -4)],
+    "head": [("X", -4)],
+    "thigh.L": [("X", 2)],
+    "shin.L": [("X", 25)],
+    "foot.L": [("X", 0)],
+    "thigh.R": [("X", 10)],
+    "shin.R": [("X", 55)],             # heel lifts, but a short, controlled step
+    "foot.R": [("X", 15)],
+    "upper_arm.L": [("Y", -9), ("X", -12)],
+    "forearm.L": [("X", -80)],
+    "upper_arm.R": [("Y", 9), ("X", -2)],
+    "forearm.R": [("X", -75)],
+}
+
+BACK_PUSH = {  # left foot, now in front, pushes the body back
+    "_loc": (0, 0, 0.01),
+    "hips": [("Z", -4)],
+    "spine": [("X", 6), ("Z", 2)],
+    "chest": [("X", 4), ("Z", 4)],
+    "neck": [("X", -4)],
+    "head": [("X", -4), ("Z", -4)],
+    "thigh.L": [("X", -18)],
+    "shin.L": [("X", 15)],
+    "foot.L": [("X", 12)],
+    "thigh.R": [("X", 28)],
+    "shin.R": [("X", 45)],
+    "foot.R": [("X", 25)],
+    "upper_arm.L": [("Y", -9), ("X", 8)],
+    "forearm.L": [("X", -70)],
+    "upper_arm.R": [("Y", 9), ("X", -20)],
+    "forearm.R": [("X", -80)],
+}
+
+BACK_KEYS = [
+    (0, BACK_CONTACT),
+    (3, BACK_PASS),
+    (6, BACK_PUSH),
+    (8, mirror_pose(BACK_CONTACT)),
+    (11, mirror_pose(BACK_PASS)),
+    (14, mirror_pose(BACK_PUSH)),
+    (16, BACK_CONTACT),
+]
+
+# ---- Strafe right: a fighter's side shuffle toward the character's right
+# (-X). The right (lead) leg steps out wide, the left (trail) leg closes in
+# under the body; the feet never cross, so the stance stays planted and
+# ready. A side shuffle isn't symmetrical, so all six poses are written
+# out instead of mirroring the first half. --------------------------------
+
+# Shared by every strafe pose: braced forward lean, a slight lean into
+# the move, head level, fists up in a guard.
+STRAFE_UPPER = {
+    "spine": [("X", 8), ("Y", -4)],
+    "chest": [("X", 4)],
+    "neck": [("X", -4)],
+    "head": [("X", -4), ("Y", 4)],
+    "upper_arm.L": [("Y", -8), ("X", -25)],
+    "forearm.L": [("X", -80)],
+    "upper_arm.R": [("Y", 8), ("X", -25)],
+    "forearm.R": [("X", -80)],
+}
+
+
+def strafe_pose(**legs):
+    """STRAFE_UPPER plus this pose's legs and hips. Python's ** collects
+    the keyword arguments into a dict; bone names with dots can't be
+    keywords, so legs use underscores here and are renamed."""
+    pose = dict(STRAFE_UPPER)
+    for key, value in legs.items():
+        name = key if key == "_loc" else key.replace("_L", ".L").replace("_R", ".R")
+        pose[name] = value
+    return pose
+
+
+STRAFE_KEYS = [
+    # Left foot closes in and lands; both feet under the body, weight drops.
+    (0, strafe_pose(
+        _loc=(0, 0, -0.06),
+        thigh_L=[("X", -6), ("Y", 2)], shin_L=[("X", 22)], foot_L=[("X", -8)],
+        thigh_R=[("X", -6), ("Y", 4)], shin_R=[("X", 22)], foot_R=[("X", -8)])),
+    # Right knee lifts and the leg starts reaching out to the right.
+    (3, strafe_pose(
+        _loc=(0, 0, -0.03),
+        thigh_L=[("X", -4), ("Y", -4)], shin_L=[("X", 25)], foot_L=[("X", -4)],
+        thigh_R=[("X", -30), ("Y", 12)], shin_R=[("X", 55)], foot_R=[("X", 10)])),
+    # Left leg drives off its toes; right leg extends out to land.
+    (6, strafe_pose(
+        _loc=(0, 0, 0.02),
+        thigh_L=[("X", 0), ("Y", -14)], shin_L=[("X", 10)], foot_L=[("X", 20)],
+        thigh_R=[("X", -12), ("Y", 22)], shin_R=[("X", 20)], foot_R=[("X", -5)])),
+    # Right foot plants wide; widest stance, body dips.
+    (8, strafe_pose(
+        _loc=(0, 0, -0.06),
+        thigh_L=[("X", 0), ("Y", -14)], shin_L=[("X", 15)], foot_L=[("X", 10)],
+        thigh_R=[("X", -6), ("Y", 18)], shin_R=[("X", 25)], foot_R=[("X", -6)])),
+    # Left leg lifts and draws in toward the right foot.
+    (11, strafe_pose(
+        _loc=(0, 0, -0.03),
+        thigh_L=[("X", -25), ("Y", -2)], shin_L=[("X", 60)], foot_L=[("X", 10)],
+        thigh_R=[("X", -4), ("Y", 8)], shin_R=[("X", 25)], foot_R=[("X", 0)])),
+    # Body passes over the right foot; left foot reaches in to land.
+    (14, strafe_pose(
+        _loc=(0, 0, 0.01),
+        thigh_L=[("X", -12), ("Y", 6)], shin_L=[("X", 30)], foot_L=[("X", -5)],
+        thigh_R=[("X", 0), ("Y", -2)], shin_R=[("X", 15)], foot_R=[("X", 15)])),
+]
+STRAFE_KEYS.append((16, STRAFE_KEYS[0][1]))
+
+# Strafe left is the mirror image. Mirroring swaps the legs, so in the
+# mirrored clip the RIGHT foot would land at frame 0; shifting it by half a
+# cycle puts the left foot back at frame 0, in step with the other clips.
+STRAFE_LEFT_KEYS = shift_keys([(f, mirror_pose(p)) for f, p in STRAFE_KEYS], 8)
+
 # ---- Idle: standing relaxed and breathing. ------------------------------
 
 IDLE_REST = {
@@ -395,7 +556,16 @@ IDLE_KEYS = [(0, IDLE_REST), (24, IDLE_BREATHE), (48, IDLE_REST)]
 
 # name -> (keys, how to move between keys). "LINEAR" gives the even,
 # mechanical motion of the run; "AUTO" is smooth Bezier for the idle.
-ANIMATIONS = {"run": (RUN_KEYS, "LINEAR"), "idle": (IDLE_KEYS, "AUTO")}
+ANIMATIONS = {
+    "run": (RUN_KEYS, "LINEAR"),
+    "run_back": (BACK_KEYS, "LINEAR"),
+    "strafe_right": (STRAFE_KEYS, "LINEAR"),
+    "strafe_left": (STRAFE_LEFT_KEYS, "LINEAR"),
+    "idle": (IDLE_KEYS, "AUTO"),
+}
+
+# The clips Godot blends by direction; previews render a strip of each.
+LOCOMOTION = ["run", "run_back", "strafe_right", "strafe_left"]
 
 
 def pose_rotation(rest_quat, rotations):
@@ -577,36 +747,49 @@ def render_previews(out_dir):
         scene.render.filepath = os.path.join(out_dir, f"player_{name}.png")
         bpy.ops.render.render(write_still=True)
 
-    # The run cycle's key frames, side by side in one strip per view.
-    rig.animation_data.action = run_action
+    # Each locomotion cycle's key frames, side by side in one strip per view.
+    # Side shows the leg swing of run/backpedal, front the strafe stance.
     scene.render.resolution_x = 300
     scene.render.resolution_y = 480
     cam_data.ortho_scale = 2.3
-    frames = [f for f, _ in RUN_KEYS[:-1]]
-    for name, (deg, elev) in {"side": (90, 5), "three_quarter": (35, 10)}.items():
-        aim(deg, elev)
-        tiles = []
-        for f in frames:
-            scene.frame_set(f)
-            path = os.path.join(out_dir, f"_tile_{f}.png")
-            scene.render.filepath = path
-            bpy.ops.render.render(write_still=True)
-            img = bpy.data.images.load(path)
-            tiles.append(list(img.pixels))
-            bpy.data.images.remove(img)
-            os.remove(path)
-        w, h = scene.render.resolution_x, scene.render.resolution_y
-        strip = bpy.data.images.new("strip", w * len(tiles), h)
-        px = [0.0] * (w * len(tiles) * h * 4)
-        for t, tile in enumerate(tiles):
-            for y in range(h):
-                row = tile[y * w * 4:(y + 1) * w * 4]
-                start = (y * w * len(tiles) + t * w) * 4
-                px[start:start + w * 4] = row
-        strip.pixels = px
-        strip.filepath_raw = os.path.join(out_dir, f"run_{name}.png")
-        strip.file_format = "PNG"
-        strip.save()
+    strip_views = {"side": (90, 5), "front": (0, 5), "game": (45, 30)}
+    for anim_name in LOCOMOTION:
+        rig.animation_data.action = bpy.data.actions[anim_name]
+        keys = ANIMATIONS[anim_name][0]
+        frames = [f for f, _ in keys[:-1]]
+        for name, (deg, elev) in strip_views.items():
+            aim(deg, elev)
+            render_strip(scene, frames,
+                         os.path.join(out_dir, f"{anim_name}_{name}.png"))
+    rig.animation_data.action = run_action
+
+
+def render_strip(scene, frames, out_path):
+    """Render the given frames and paste them side by side into one PNG."""
+    out_dir = os.path.dirname(out_path)
+    tiles = []
+    for f in frames:
+        scene.frame_set(f)
+        path = os.path.join(out_dir, f"_tile_{f}.png")
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        img = bpy.data.images.load(path)
+        tiles.append(list(img.pixels))
+        bpy.data.images.remove(img)
+        os.remove(path)
+    w, h = scene.render.resolution_x, scene.render.resolution_y
+    strip = bpy.data.images.new("strip", w * len(tiles), h)
+    px = [0.0] * (w * len(tiles) * h * 4)
+    for t, tile in enumerate(tiles):
+        for y in range(h):
+            row = tile[y * w * 4:(y + 1) * w * 4]
+            start = (y * w * len(tiles) + t * w) * 4
+            px[start:start + w * 4] = row
+    strip.pixels = px
+    strip.filepath_raw = out_path
+    strip.file_format = "PNG"
+    strip.save()
+    bpy.data.images.remove(strip)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,9 @@ namespace BulletHeavenLike;
 /// <summary>
 /// The player character. Moves along the ground in the screen direction of
 /// the move_left / move_right / move_up / move_down actions (WASD, the arrow
-/// keys or the left-hand stick) and plays the run or idle animation.
+/// keys or the left-hand stick). Its legs animate by the direction it moves
+/// *relative to where it faces*: run forward, backpedal, or strafe, blended
+/// for diagonals (see SetUpAnimationTree).
 ///
 /// Facing (which is also where weapons fire, see Forward) is chosen in
 /// this order:
@@ -28,8 +30,9 @@ public partial class Player : CharacterBody3D
     // snappier; it's a rate, not degrees, see _PhysicsProcess.
     [Export] public float TurnSpeed = 14.0f;
 
-    // Seconds to cross-fade between run and idle, so switching isn't a pop.
-    [Export] public float AnimationBlendTime = 0.06f;
+    // How quickly the legs blend to a new movement animation (idle -> run,
+    // run -> strafe, ...). Higher is snappier; a rate like TurnSpeed.
+    [Export] public float AnimationBlendSpeed = 15.0f;
 
     // How many times per second the character's pose updates. A low value
     // (around 10-15) gives the choppy, stepped look of PS1-era games, while
@@ -39,8 +42,15 @@ public partial class Player : CharacterBody3D
     // Animation names, as exported from Blender. A StringName is Godot's
     // fast, interned string type. Creating it once here ("static readonly")
     // avoids converting a C# string to a StringName every frame.
-    private static readonly StringName RunAnimation = "run";
     private static readonly StringName IdleAnimation = "idle";
+    private static readonly StringName RunAnimation = "run";
+    private static readonly StringName RunBackAnimation = "run_back";
+    private static readonly StringName StrafeLeftAnimation = "strafe_left";
+    private static readonly StringName StrafeRightAnimation = "strafe_right";
+
+    // Where the AnimationTree keeps the blend space's position. Every node
+    // in a tree exposes its settings under "parameters/...".
+    private static readonly StringName BlendPositionParameter = "parameters/blend_position";
     private static readonly StringName MoveLeft = "move_left";
     private static readonly StringName MoveRight = "move_right";
     private static readonly StringName MoveUp = "move_up";
@@ -50,15 +60,17 @@ public partial class Player : CharacterBody3D
     private static readonly StringName AimUp = "aim_up";
     private static readonly StringName AimDown = "aim_down";
 
-    // The imported model (a child node) and the AnimationPlayer that came
-    // with it. We rotate only the model, not the whole body, so the
-    // collision shape and camera maths stay simple.
+    // The imported model (a child node). We rotate only the model, not the
+    // whole body, so the collision shape and camera maths stay simple.
     private Node3D _model;
-    private AnimationPlayer _animationPlayer;
 
-    // Remembers which animation we asked for, so we only call Play() when
-    // it actually changes.
-    private bool _isRunning;
+    // Mixes the movement animations by direction (see SetUpAnimationTree).
+    private AnimationTree _animationTree;
+
+    // The blend position we're currently showing. It glides toward the
+    // target each frame instead of jumping, which is what cross-fades
+    // between animations.
+    private Vector2 _blendPosition;
 
     // Game time collected since the pose was last updated (see _Process).
     private double _animationTimeAccumulated;
@@ -138,8 +150,74 @@ public partial class Player : CharacterBody3D
         // it to the given type. The AnimationPlayer lives inside the
         // imported player.glb scene, which is instanced as "Model".
         _model = GetNode<Node3D>("Model");
-        _animationPlayer = GetNode<AnimationPlayer>("Model/AnimationPlayer");
-        _animationPlayer.Play(IdleAnimation);
+        SetUpAnimationTree(GetNode<AnimationPlayer>("Model/AnimationPlayer"));
+    }
+
+    /// <summary>
+    /// Builds an AnimationTree that blends the movement animations by the
+    /// direction the character moves relative to where it faces.
+    ///
+    /// The heart of it is a 2D blend space: a square map where each
+    /// animation sits at a point. x is "how much to the character's right",
+    /// y is "how much forward":
+    ///
+    ///                  run (0, 1)
+    ///                      |
+    ///   strafe_left ---- idle ---- strafe_right
+    ///     (-1, 0)        (0, 0)       (1, 0)
+    ///                      |
+    ///               run_back (0, -1)
+    ///
+    /// Each frame we put a marker on that map (the blend position) and the
+    /// tree mixes the nearest animations by distance. Moving forward-right
+    /// lands between run and strafe_right and gets a bit of both.
+    /// </summary>
+    private void SetUpAnimationTree(AnimationPlayer animationPlayer)
+    {
+        // The new clips aren't marked as looping in the import settings,
+        // so loop all the cycles here. This changes the imported animation
+        // in memory only, every time the game starts.
+        StringName[] cycles = { IdleAnimation, RunAnimation, RunBackAnimation, StrafeLeftAnimation, StrafeRightAnimation };
+        foreach (StringName name in cycles)
+        {
+            animationPlayer.GetAnimation(name).LoopMode = Animation.LoopModeEnum.Linear;
+        }
+
+        AnimationNodeBlendSpace2D blendSpace = new();
+        // "Independent" sync keeps every animation in the space playing,
+        // even ones currently mixed in at zero, instead of freezing them.
+        // All the move cycles are the same length and plant the same foot
+        // on the same frame (see make_player.py), so they stay in step and
+        // the feet line up when they blend. (The "Cyclic" modes would also
+        // time-stretch the clips; we don't need that.)
+        blendSpace.SyncMode = AnimationNodeBlendSpace2D.SyncModeEnum.Independent;
+        AddBlendClip(blendSpace, IdleAnimation, Vector2.Zero);
+        AddBlendClip(blendSpace, RunAnimation, new Vector2(0, 1));
+        AddBlendClip(blendSpace, RunBackAnimation, new Vector2(0, -1));
+        AddBlendClip(blendSpace, StrafeRightAnimation, new Vector2(1, 0));
+        AddBlendClip(blendSpace, StrafeLeftAnimation, new Vector2(-1, 0));
+
+        // The tree takes over playing animations from the AnimationPlayer;
+        // the player now just supplies the clips. It goes next to the
+        // AnimationPlayer (under Model) because animation tracks are paths
+        // relative to the model, and the tree resolves them from its parent.
+        _animationTree = new AnimationTree { TreeRoot = blendSpace };
+        _model.AddChild(_animationTree);
+        _animationTree.AnimPlayer = _animationTree.GetPathTo(animationPlayer);
+        _animationTree.Active = true;
+    }
+
+    /// <summary>
+    /// Puts one animation clip at a point in the blend space, naming the
+    /// point after the clip.
+    /// </summary>
+    private static void AddBlendClip(AnimationNodeBlendSpace2D blendSpace, StringName clip, Vector2 position)
+    {
+        // "new T { Property = value }" is an object initializer: create the
+        // object and set properties in one expression. atIndex -1 means
+        // "add at the end".
+        AnimationNodeAnimation node = new() { Animation = clip };
+        blendSpace.AddBlendPoint(node, position, -1, clip);
     }
 
     public override void _Input(InputEvent @event)
@@ -160,14 +238,14 @@ public partial class Player : CharacterBody3D
     {
         if (AnimationFps <= 0.0f)
         {
-            // Smooth mode: let the AnimationPlayer update itself every frame.
-            _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Idle;
+            // Smooth mode: let the AnimationTree update itself every frame.
+            _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Idle;
             return;
         }
 
-        // Choppy mode: "Manual" stops the AnimationPlayer from advancing on
+        // Choppy mode: "Manual" stops the AnimationTree from advancing on
         // its own; it only moves when we call Advance().
-        _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+        _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
 
         // Collect time, and once a whole step (e.g. 1/12 s) has passed, jump
         // the animation forward by that many steps in one go. In between,
@@ -178,7 +256,7 @@ public partial class Player : CharacterBody3D
         {
             // (int) cuts off the fraction, e.g. 2.7 steps -> 2 whole steps.
             int steps = (int)(_animationTimeAccumulated / step);
-            _animationPlayer.Advance(steps * step);
+            _animationTree.Advance(steps * step);
             // Keep the leftover fraction so the rhythm stays even.
             _animationTimeAccumulated -= steps * step;
         }
@@ -216,7 +294,7 @@ public partial class Player : CharacterBody3D
         {
             FaceDirection(direction, (float)delta);
         }
-        UpdateAnimation(isMoving);
+        UpdateAnimation(direction, (float)delta);
     }
 
     /// <summary>
@@ -301,16 +379,25 @@ public partial class Player : CharacterBody3D
     }
 
     /// <summary>
-    /// Plays the run animation while moving and idle while standing still.
+    /// Moves the blend-space marker toward the current movement direction,
+    /// measured in the character's own frame (x = right, y = forward).
     /// </summary>
-    private void UpdateAnimation(bool isMoving)
+    private void UpdateAnimation(Vector3 moveDirection, float delta)
     {
-        if (isMoving == _isRunning)
-        {
-            return; // already playing the right one
-        }
-        _isRunning = isMoving;
-        _animationPlayer.Play(isMoving ? RunAnimation : IdleAnimation, AnimationBlendTime);
+        // The dot product of two directions says how much one points along
+        // the other: 1 = same way, 0 = at right angles, -1 = opposite. So
+        // these two dots are the movement's "right" and "forward" parts.
+        // Standing still gives (0, 0): idle, in the middle of the map.
+        Vector2 target = new(moveDirection.Dot(Right), moveDirection.Dot(Forward));
+
+        // Glide toward it at a steady rate whatever the frame rate (the
+        // same trick as FaceDirection), so changes cross-fade.
+        float weight = 1.0f - Mathf.Exp(-AnimationBlendSpeed * delta);
+        _blendPosition = _blendPosition.Lerp(target, weight);
+
+        // Set takes a Variant, Godot's "any value" type. A Vector2 converts
+        // to one without allocating memory.
+        _animationTree.Set(BlendPositionParameter, _blendPosition);
     }
 
     /// <summary>
