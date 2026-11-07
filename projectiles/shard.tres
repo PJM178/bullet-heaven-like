@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/ProjectileDefinition.cs" id="1_def"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_shard"]
+shading_mode = 0
+albedo_color = Color(1, 0.84, 0.55, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_shard"]
+material = SubResource("StandardMaterial3D_shard")
+radius = 0.09
+height = 0.18
+radial_segments = 4
+rings = 2
+
+[resource]
+script = ExtResource("1_def")
+Speed = 14.0
+Lifetime = 0.8
+Damage = 1.0
+Radius = 0.15
+Mesh = SubResource("SphereMesh_shard")

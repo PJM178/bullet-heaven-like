@@ -53,6 +53,54 @@ public partial class Player : CharacterBody3D
     // so those two directions are different.
     private Camera3D _camera;
 
+    // ---- Facing: the character's own frame of reference ------------------
+    // Weapons (and anything else that cares about "in front of" or "behind"
+    // the player) describe directions as an angle around the character,
+    // seen from above:
+    //
+    //                 0° (front)
+    //                    |
+    //     270° (left) ---●--- 90° (right)
+    //                    |
+    //                180° (back)
+    //
+    // These are read-only properties. "=>" here is an "expression-bodied"
+    // property: a short way to write a getter that computes its value every
+    // time it is read, instead of storing it. They return plain Vector3
+    // structs, so reading them every frame costs no allocations.
+
+    /// <summary>
+    /// The direction the character is facing, flat on the ground, length 1.
+    /// This follows the model's actual rotation, so while the character is
+    /// still turning (see TurnSpeed) it is where the model visibly points,
+    /// not where the input points. When standing still it keeps the last
+    /// facing.
+    /// </summary>
+    public Vector3 Forward => FlattenToGround(_model.GlobalBasis.Z);
+
+    /// <summary>
+    /// The character's right-hand side, flat on the ground, length 1.
+    /// </summary>
+    // The model's front is +Z and up is +Y. In Godot's right-handed axes
+    // that makes the character's right -X, not +X (a camera, which looks
+    // along -Z, has its right at +X instead).
+    public Vector3 Right => FlattenToGround(-_model.GlobalBasis.X);
+
+    /// <summary>
+    /// The direction at the given angle around the character, in degrees,
+    /// measured clockwise from the front when seen from above: 0 = front,
+    /// 90 = right, 180 = back, 270 (or -90) = left.
+    /// </summary>
+    public Vector3 DirectionAt(float degrees)
+    {
+        // Mixing the front and right directions by cos/sin of the angle
+        // sweeps a full circle: at 0° it is all Forward, at 90° all Right,
+        // at 180° it is -Forward (back), and so on. Both inputs are length 1
+        // and at right angles, so the result is length 1 too.
+        float radians = Mathf.DegToRad(degrees);
+        return Forward * Mathf.Cos(radians) + Right * Mathf.Sin(radians);
+    }
+
     // _Ready runs once, when the node and its children have entered the scene.
     public override void _Ready()
     {
