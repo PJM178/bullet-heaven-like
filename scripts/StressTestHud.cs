@@ -9,8 +9,8 @@ namespace BulletHeavenLike;
 /// </summary>
 public partial class StressTestHud : CanvasLayer
 {
-    [Export] public EnemyManager Enemies;
-    [Export] public ProjectileManager Projectiles;
+    [Export] public EnemyManager EnemyManager;
+    [Export] public ProjectileManager ProjectileManager;
 
     // How many enemies each button press adds or removes.
     [Export] public int Step = 50;
@@ -36,17 +36,17 @@ public partial class StressTestHud : CanvasLayer
 
     private void ChangeTarget(int amount)
     {
-        if (Enemies == null)
+        if (EnemyManager == null)
         {
             return;
         }
-        Enemies.TargetCount = Mathf.Clamp(Enemies.TargetCount + amount, 0, Enemies.MaxEnemies);
+        EnemyManager.TargetCount = Mathf.Clamp(EnemyManager.TargetCount + amount, 0, EnemyManager.MaxEnemies);
     }
 
     public override void _Process(double delta)
     {
         _sinceRefresh += delta;
-        if (_sinceRefresh < RefreshInterval || Enemies == null)
+        if (_sinceRefresh < RefreshInterval || EnemyManager == null)
         {
             return;
         }
@@ -62,10 +62,10 @@ public partial class StressTestHud : CanvasLayer
         // $"..." is string interpolation; ":0.0" formats to one decimal.
         _stats.Text =
             $"FPS {fps:0}\n" +
-            $"Enemies {Enemies.Count} / {Enemies.TargetCount}\n" +
-            // "?." returns null instead of crashing if Projectiles isn't
+            $"Enemies {EnemyManager.Count} / {EnemyManager.TargetCount}\n" +
+            // "?." returns null instead of crashing if ProjectileManager isn't
             // set, and "?? 0" then substitutes 0 for that null.
-            $"Projectiles {Projectiles?.Count ?? 0}\n" +
+            $"Projectiles {ProjectileManager?.Count ?? 0}\n" +
             $"Draw calls {drawCalls:0}\n" +
             $"Process {processMs:0.0} ms  Physics {physicsMs:0.0} ms";
     }

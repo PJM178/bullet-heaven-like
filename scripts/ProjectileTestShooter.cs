@@ -10,7 +10,7 @@ namespace BulletHeavenLike;
 public partial class ProjectileTestShooter : Node
 {
     [Export] public Player Player;
-    [Export] public ProjectileManager Projectiles;
+    [Export] public ProjectileManager ProjectileManager;
     [Export] public ProjectileDefinition Projectile;
 
     // Seconds between shots.
@@ -26,7 +26,7 @@ public partial class ProjectileTestShooter : Node
 
     public override void _PhysicsProcess(double delta)
     {
-        if (Player == null || Projectiles == null || Projectile == null)
+        if (Player == null || ProjectileManager == null || Projectile == null)
         {
             return;
         }
@@ -42,6 +42,6 @@ public partial class ProjectileTestShooter : Node
 
         Vector3 forward = Player.Forward;
         Vector3 muzzle = Player.GlobalPosition + forward * MuzzleForward + Vector3.Up * MuzzleHeight;
-        Projectiles.Spawn(Projectile, muzzle, forward);
+        ProjectileManager.Spawn(Projectile, muzzle, forward);
     }
 }

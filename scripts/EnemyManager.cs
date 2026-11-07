@@ -54,6 +54,10 @@ public partial class EnemyManager : Node3D
     [Export] public float StopDistance = 0.7f;
     [Export] public float ArriveSlowdown = 1.0f;
 
+    // How big an enemy counts as for projectile collisions, in metres on
+    // the ground (see HitTest). Roughly the slime's footprint.
+    [Export] public float EnemyRadius = 0.25f;
+
     // Stepped, PS1-style animation rate (see Player.AnimationFps).
     [Export] public float AnimationFps = 12.0f;
 
@@ -137,6 +141,12 @@ public partial class EnemyManager : Node3D
         BuildGrid();
         ComputeSeparation();
         MoveEnemies((float)delta);
+
+        // Rebuild the grid from the positions enemies have just moved to,
+        // so HitTest (called by ProjectileManager later in this same step)
+        // looks in the right cells. Building it is cheap: two passes over
+        // the enemies plus one over the table.
+        BuildGrid();
     }
 
     public override void _Process(double delta)
@@ -207,6 +217,55 @@ public partial class EnemyManager : Node3D
         // animation yet, so CurrentAnimationLength would still be 0.)
         double length = animationPlayer.GetAnimation(MoveAnimation).Length;
         animationPlayer.Seek(Random.Shared.NextDouble() * length, true);
+    }
+
+    /// <summary>
+    /// Returns the index of an enemy overlapping the circle at point with
+    /// the given radius (measured on the ground, height is ignored), or -1
+    /// if there is none. Only valid during the current physics step:
+    /// enemy indices change when enemies are removed.
+    /// </summary>
+    public int HitTest(Vector3 point, float radius)
+    {
+        if (_count == 0)
+        {
+            return -1;
+        }
+
+        // The two circles overlap when their centres are closer than the
+        // two radii added together.
+        float reach = radius + EnemyRadius;
+        float reachSquared = reach * reach;
+
+        // How many cells out from the point's cell we have to look. Cells
+        // are SeparationRadius wide, so with the default sizes this is 1
+        // (the 3x3 block), but a big projectile would need more.
+        int cellRange = Mathf.CeilToInt(reach / SeparationRadius);
+        int cellX = CellCoord(point.X);
+        int cellZ = CellCoord(point.Z);
+
+        for (int dz = -cellRange; dz <= cellRange; dz++)
+        {
+            for (int dx = -cellRange; dx <= cellRange; dx++)
+            {
+                int slot = CellSlot(cellX + dx, cellZ + dz);
+                int start = _cellStart[slot];
+                int end = start + _cellCount[slot];
+
+                for (int e = start; e < end; e++)
+                {
+                    int j = _cellEntries[e];
+                    float offsetX = _positions[j].X - point.X;
+                    float offsetZ = _positions[j].Z - point.Z;
+                    if (offsetX * offsetX + offsetZ * offsetZ < reachSquared)
+                    {
+                        return j;
+                    }
+                }
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>

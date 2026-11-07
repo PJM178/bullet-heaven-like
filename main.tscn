@@ -63,10 +63,10 @@ shape = SubResource("CapsuleShape3D_player")
 script = ExtResource("8_facing")
 Player = NodePath("..")
 
-[node name="ProjectileTestShooter" type="Node" parent="Player" node_paths=PackedStringArray("Player", "Projectiles")]
+[node name="ProjectileTestShooter" type="Node" parent="Player" node_paths=PackedStringArray("Player", "ProjectileManager")]
 script = ExtResource("10_test_shooter")
 Player = NodePath("..")
-Projectiles = NodePath("../../ProjectileManager")
+ProjectileManager = NodePath("../../ProjectileManager")
 Projectile = ExtResource("11_shard")
 
 [node name="Bush" parent="." instance=ExtResource("4_bush")]
@@ -77,11 +77,12 @@ script = ExtResource("6_enemies")
 EnemyScene = ExtResource("5_slime")
 Target = NodePath("../Player")
 
-[node name="ProjectileManager" type="Node3D" parent="."]
+[node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager")]
 script = ExtResource("9_projectiles")
+EnemyManager = NodePath("../EnemyManager")
 
-[node name="StressTestHud" parent="." node_paths=PackedStringArray("Enemies", "Projectiles") instance=ExtResource("7_hud")]
-Enemies = NodePath("../EnemyManager")
-Projectiles = NodePath("../ProjectileManager")
+[node name="StressTestHud" parent="." node_paths=PackedStringArray("EnemyManager", "ProjectileManager") instance=ExtResource("7_hud")]
+EnemyManager = NodePath("../EnemyManager")
+ProjectileManager = NodePath("../ProjectileManager")
 
 [editable path="Player/Model"]

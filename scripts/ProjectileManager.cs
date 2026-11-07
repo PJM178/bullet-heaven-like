@@ -7,8 +7,8 @@ namespace BulletHeavenLike;
 ///
 /// Same design as EnemyManager: projectile data lives in plain C# arrays
 /// and everything moves in one loop. Weapons only call Spawn(); after that
-/// the manager moves the projectile and returns it to the pool when its
-/// lifetime runs out (and, later, when it hits an enemy).
+/// the manager moves the projectile, checks it against the enemies, and
+/// returns it to the pool when it hits one or its lifetime runs out.
 ///
 /// Projectiles are pooled: every node is created once in _Ready and reused.
 ///
@@ -21,14 +21,31 @@ public partial class ProjectileManager : Node3D
     // once. If it is full, Spawn() skips the shot instead of growing.
     [Export] public int MaxProjectiles = 512;
 
+    // The manager that owns the enemies projectiles can hit. It is set in
+    // main.tscn. Without it projectiles still fly, they just pass through
+    // everything.
+    //
+    // The field has the same name as its type, which C# allows: in
+    // "EnemyManager.HitTest(...)" the compiler sees that a field called
+    // EnemyManager exists and uses it, so this calls the method on the one
+    // manager object in the scene.
+    [Export] public EnemyManager EnemyManager;
+
+    // Godot runs _PhysicsProcess on nodes in order of this priority, lowest
+    // first (EnemyManager keeps the default 0). Hit checks have to see
+    // where enemies are *after* they moved and rebuilt their grid this
+    // step, so we run later. Setting it in code makes the order explicit
+    // instead of depending on where the nodes sit in the scene tree.
+    private const int PhysicsPriorityAfterEnemies = 10;
+
     // ---- Projectile data. Index i in every array is the same projectile.
     // Only the first _count entries are in flight; the rest are spare
     // pool slots. ---------------------------------------------------------
     private Vector3[] _positions;
     private Vector3[] _velocities;   // metres per second, direction * speed
     private float[] _timeLeft;       // seconds until it disappears
-    private float[] _damage;         // copied now, used once hits exist
-    private float[] _radius;         // likewise
+    private float[] _damage;         // copied now, used once damage exists
+    private float[] _radius;         // hit radius on the ground
     private MeshInstance3D[] _nodes;
     private int _count;
 
@@ -37,6 +54,8 @@ public partial class ProjectileManager : Node3D
 
     public override void _Ready()
     {
+        ProcessPhysicsPriority = PhysicsPriorityAfterEnemies;
+
         _positions = new Vector3[MaxProjectiles];
         _velocities = new Vector3[MaxProjectiles];
         _timeLeft = new float[MaxProjectiles];
@@ -100,7 +119,7 @@ public partial class ProjectileManager : Node3D
     }
 
     // Movement in _PhysicsProcess, like the enemies, so that hit checks
-    // (next step) compare positions from the same fixed time step.
+    // compare positions from the same fixed time step.
     public override void _PhysicsProcess(double delta)
     {
         float dt = (float)delta;
@@ -119,6 +138,25 @@ public partial class ProjectileManager : Node3D
             }
 
             _positions[i] += _velocities[i] * dt;
+
+            // Hits are only checked at the new position, not along the path
+            // since the last step. That is fine while a projectile moves less
+            // per step than its hit size: a shard moves about 0.23 m per step
+            // (14 m/s at 60 steps/s) against a 0.4 m reach. Much faster
+            // projectiles would need a swept test.
+            if (EnemyManager != null)
+            {
+                int hit = EnemyManager.HitTest(_positions[i], _radius[i]);
+                if (hit >= 0)
+                {
+                    // For now a hit just stops the projectile; the enemy is
+                    // untouched. Damage comes next, and pierce would mean
+                    // counting down here instead of despawning.
+                    Despawn(i);
+                    continue;
+                }
+            }
+
             _nodes[i].Position = _positions[i];
         }
     }
