@@ -69,7 +69,8 @@ public partial class StressTestHud : CanvasLayer
             // "?." returns null instead of crashing if ProjectileManager isn't
             // set, and "?? 0" then substitutes 0 for that null.
             $"Projectiles {ProjectileManager?.Count ?? 0}\n" +
-            $"XP {Player?.Experience ?? 0}  Orbs {XpManager?.Count ?? 0}\n" +
+            $"XP {Player?.Stats.ExperienceIntoLevel ?? 0} / {Player?.Stats.ExperienceToNextLevel ?? 0}" +
+            $"  Lv {Player?.Stats.Level ?? 0}  Orbs {XpManager?.Count ?? 0}\n" +
             $"Draw calls {drawCalls:0}\n" +
             $"Process {processMs:0.0} ms  Physics {physicsMs:0.0} ms";
     }

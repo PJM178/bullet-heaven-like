@@ -18,8 +18,80 @@ public partial class CameraFollow : Camera3D
     // straight to the target with no smoothing at all.
     [Export] public float FollowSpeed = 0.0f;
 
+    // How many times per second a shake picks a new offset. Low and
+    // choppy reads as a jolt (and suits the PS1 look) rather than a blur.
+    [Export] public float ShakeRate = 30.0f;
+
     // Camera position relative to the target, measured once at the start.
     private Vector3 _offset;
+
+    // The current shake: how strong it started, how long it lasts, how
+    // much is left, and time until the next new offset.
+    private float _shakeStrength;
+    private float _shakeDuration;
+    private float _shakeLeft;
+    private float _shakeStepLeft;
+
+    /// <summary>
+    /// Shakes the view for a moment, e.g. on a heavy hit. Strength is the
+    /// largest offset in metres; it dies away over duration seconds. A
+    /// weaker shake doesn't cut short a stronger one already playing.
+    /// </summary>
+    public void Shake(float strength, float duration)
+    {
+        float current = _shakeLeft > 0.0f ? _shakeStrength * (_shakeLeft / _shakeDuration) : 0.0f;
+        if (strength < current || duration <= 0.0f)
+        {
+            return;
+        }
+        _shakeStrength = strength;
+        _shakeDuration = duration;
+        _shakeLeft = duration;
+        _shakeStepLeft = 0.0f;
+    }
+
+    // The shake moves the view with HOffset / VOffset, which slide the
+    // picture sideways and up/down without moving the camera node. So it
+    // never fights with the following in _PhysicsProcess.
+    public override void _Process(double delta)
+    {
+        if (_shakeLeft <= 0.0f)
+        {
+            return;
+        }
+
+        // Hit-stop (see HammerWeapon) slows the game clock right as a shake
+        // starts. Dividing by the time scale gives real seconds, so the
+        // shake plays during the freeze, which is what sells the hit.
+        float dt = (float)delta;
+        if (Engine.TimeScale > 0.0)
+        {
+            dt /= (float)Engine.TimeScale;
+        }
+
+        _shakeLeft -= dt;
+        if (_shakeLeft <= 0.0f)
+        {
+            HOffset = 0.0f;
+            VOffset = 0.0f;
+            return;
+        }
+
+        _shakeStepLeft -= dt;
+        if (_shakeStepLeft > 0.0f)
+        {
+            return;
+        }
+        _shakeStepLeft = 1.0f / ShakeRate;
+
+        // Fade out quickly: squaring the remaining share makes the first
+        // jolts strong and the tail of the shake gentle.
+        float remaining = _shakeLeft / _shakeDuration;
+        float amount = _shakeStrength * remaining * remaining;
+        // Mostly up and down, the direction a downward smash pushes.
+        HOffset = (float)GD.RandRange(-amount, amount) * 0.5f;
+        VOffset = (float)GD.RandRange(-amount, amount);
+    }
 
     public override void _Ready()
     {

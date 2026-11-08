@@ -98,17 +98,11 @@ public partial class Player : CharacterBody3D
     private Vector2 _mousePosition;
 
     /// <summary>
-    /// Experience collected so far (from XP orbs, see XpManager). Levels
-    /// and upgrades will be built on top of this.
+    /// Experience and level (see PlayerStats), a child node named "Stats".
     /// "{ get; private set; }" is an auto-property: anyone can read it, but
-    /// only Player can change it, through AddExperience.
+    /// only Player can assign it (in _Ready).
     /// </summary>
-    public int Experience { get; private set; }
-
-    public void AddExperience(int amount)
-    {
-        Experience += amount;
-    }
+    public PlayerStats Stats { get; private set; }
 
     // ---- Facing: the character's own frame of reference ------------------
     // Weapons (and anything else that cares about "in front of" or "behind"
@@ -162,6 +156,8 @@ public partial class Player : CharacterBody3D
     public override void _Ready()
     {
         _camera = GetViewport().GetCamera3D();
+        Stats = GetNode<PlayerStats>("Stats");
+        Stats.LeveledUp += OnLeveledUp;
 
         // On Android, Godot turns every touch into a fake mouse event too
         // ("Emulate Mouse From Touch"), so the cursor would jump to the
@@ -173,6 +169,12 @@ public partial class Player : CharacterBody3D
         // imported player.glb scene, which is instanced as "Model".
         _model = GetNode<Node3D>("Model");
         SetUpAnimationTree(GetNode<AnimationPlayer>("Model/AnimationPlayer"));
+    }
+
+    // Placeholder until there's a level-up screen to open from here.
+    private void OnLeveledUp(int newLevel)
+    {
+        GD.Print($"Level up! Now level {newLevel}");
     }
 
     /// <summary>

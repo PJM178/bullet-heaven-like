@@ -257,7 +257,7 @@ public partial class XpManager : Node3D
                     // Absorbed if it's close, or would overshoot this step.
                     if (distanceSquared <= absorbSquared || step * step >= distanceSquared)
                     {
-                        Player.AddExperience(_values[i]);
+                        Player.Stats.AddExperience(_values[i]);
                         Remove(i);
                         continue; // "continue" skips to the next loop round
                     }

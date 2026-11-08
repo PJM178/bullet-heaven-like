@@ -123,7 +123,11 @@ public partial class VirtualJoystick : Control
         // If the app loses focus mid-drag (a call, the home button), the
         // finger-up event never arrives. Let go, or the player would keep
         // running on their own when the game comes back.
-        if (what == NotificationApplicationFocusOut || what == NotificationVisibilityChanged)
+        // The same goes for pausing: a paused node gets no input, so a
+        // finger lifted while the pause screen is up would go unnoticed.
+        if (what == NotificationApplicationFocusOut
+            || what == NotificationVisibilityChanged
+            || what == NotificationPaused)
         {
             Release();
         }
