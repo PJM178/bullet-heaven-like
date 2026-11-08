@@ -15,7 +15,8 @@ namespace BulletHeavenLike;
 ///   2. hit       - a bright star burst where it landed, at the impact.
 ///   3. ripple    - tight rings flat on the ground, at the impact.
 ///   4. shockwave - a moment later, a big soft-rimmed ring bursting out and
-///                  fading.
+///                  fading. Its edge damages enemies as it sweeps past them
+///                  (outside the smash circle, so nobody is hit by both).
 /// Plus, at the impact: pale chunks thrown up, a split-second hit-stop and
 /// a camera shake.
 ///
@@ -33,7 +34,7 @@ public partial class HammerWeapon : Node3D
     [Export] public EnemyManager EnemyManager;
 
     // Seconds between smashes.
-    [Export] public float Cooldown = 3.0f;
+    [Export] public float Cooldown = 2.0f;
 
     // Damage to every enemy in the smash. Slimes have 2 health, so one
     // smash kills them.
@@ -44,6 +45,10 @@ public partial class HammerWeapon : Node3D
 
     // Width of the smash circle (its diameter), in metres.
     [Export] public float SmashDiameter = 2.0f;
+
+    // Damage the shockwave's edge deals to each enemy it sweeps over,
+    // beyond the smash circle. 0 turns it off.
+    [Export] public float ShockwaveDamage = 1.0f;
 
     [ExportGroup("Timing")]
     // Frames per second for every sprite animation. Low, so they step like
@@ -66,9 +71,10 @@ public partial class HammerWeapon : Node3D
     [Export] public float HammerSize = 3.6f;
     [Export] public float HitSize = 1.1f;
     [Export] public float RippleSize = 1.4f;
-    // The shockwave's size relative to the smash circle. Above 1 it spreads
-    // a little past the damage area as it fades.
-    [Export] public float ShockwaveScale = 1.3f;
+    // The shockwave sprite's size relative to the smash circle. The ring
+    // ends at about half this width, so at 2.5 with a 2 m smash it reaches
+    // about 2.4 m out, sweeping 1.4 m past the smash circle.
+    [Export] public float ShockwaveScale = 2.5f;
 
     [ExportGroup("Impact feel")]
     // Hit-stop: for this many real seconds the game runs at this speed.
@@ -101,6 +107,14 @@ public partial class HammerWeapon : Node3D
     // Height of the hit burst's centre above the ground.
     private const float HitHeight = 0.3f;
 
+    // The shockwave ring's radius on each frame, copied from
+    // make_shockwave() in art/tools/make_hammer_fall_sprites.py so the
+    // damage follows the drawn ring. In pixels of its 96-pixel frame:
+    //   radius = 10 + 36 * grow, grow = 1 - (1 - t)^3, t = frame / (frames - 1)
+    private const float ShockFramePixels = 96.0f;
+    private const float ShockStartPixels = 10.0f;
+    private const float ShockGrowPixels = 36.0f;
+
     private static readonly StringName FrameParameter = "frame";
     private static readonly StringName FramesParameter = "frames";
     private static readonly StringName FlipParameter = "flip_h";
@@ -130,6 +144,8 @@ public partial class HammerWeapon : Node3D
     {
         public bool Active;
         public bool Impacted;
+        // The shockwave's damage, sweeping outward after the impact.
+        public ExpandingWave Wave;
         public Vector3 Target;
         // Two clocks, as with the other weapons: gameplay (the impact) runs
         // in _PhysicsProcess, the visuals in _Process.
@@ -190,6 +206,7 @@ public partial class HammerWeapon : Node3D
             Shockwave = BuildLayer(ShockwaveMaterial,
                 new PlaneMesh { Size = new Vector2(shockwaveSize, shockwaveSize) }, _impactTime + ShockwaveDelay),
             Debris = BuildDebris(),
+            Wave = new ExpandingWave(EnemyManager),
         };
     }
 
@@ -231,14 +248,18 @@ public partial class HammerWeapon : Node3D
 
         foreach (Cast cast in _casts)
         {
-            if (!cast.Active || cast.Impacted)
+            if (!cast.Active || (cast.Impacted && !cast.Wave.Active))
             {
                 continue;
             }
             cast.PhysicsTime += dt;
-            if (cast.PhysicsTime >= _impactTime)
+            if (!cast.Impacted && cast.PhysicsTime >= _impactTime)
             {
                 Impact(cast);
+            }
+            if (cast.Wave.Active)
+            {
+                UpdateWave(cast);
             }
         }
 
@@ -268,6 +289,7 @@ public partial class HammerWeapon : Node3D
         cast.Target = Player.GlobalPosition + forward * SmashDistance;
         cast.Active = true;
         cast.Impacted = false;
+        cast.Wave.Stop();
         cast.PhysicsTime = 0.0f;
         cast.VisualTime = 0.0f;
 
@@ -301,6 +323,10 @@ public partial class HammerWeapon : Node3D
             EnemyManager.Damage(_targets[n], Damage);
         }
 
+        // The shockwave starts at the smash circle's edge: everything inside
+        // has just been hit by the hammer itself.
+        cast.Wave.StartRing(cast.Target, SmashDiameter * 0.5f, ShockwaveDamage);
+
         cast.Debris.GlobalPosition = cast.Target + Vector3.Up * GroundLift;
         cast.Debris.Restart();
 
@@ -309,6 +335,54 @@ public partial class HammerWeapon : Node3D
         (GetViewport().GetCamera3D() as CameraFollow)?.Shake(ShakeStrength, ShakeDuration);
 
         StartHitStop();
+    }
+
+    /// <summary>
+    /// Moves the shockwave's damaging edge out to where the ring is drawn
+    /// now, damaging the enemies it passes, and ends it once the ring has
+    /// faded.
+    /// </summary>
+    private void UpdateWave(Cast cast)
+    {
+        float radius = ShockwaveRadiusAt(cast.PhysicsTime - _impactTime);
+        if (radius < 0.0f)
+        {
+            cast.Wave.Stop();
+            return;
+        }
+        cast.Wave.SweepTo(radius);
+    }
+
+    /// <summary>
+    /// The shockwave ring's radius in metres, timeSinceImpact seconds after
+    /// the hammer hit, or -1 once it has faded out. Before it sets off
+    /// (ShockwaveDelay) it is 0.
+    ///
+    /// It follows the sprite's growth curve, but smoothly rather than in the
+    /// sprite's frame steps. Stepped, the edge jumped up to half a metre at
+    /// a time, so enemies were hit in clumps every 1/SpriteFps seconds
+    /// instead of one after another as the ring passed them.
+    /// </summary>
+    public float ShockwaveRadiusAt(float timeSinceImpact)
+    {
+        int frames = _casts[0].Shockwave.Frames;
+        // Which frame the sprite is on, with the fraction of the way to the
+        // next one kept (a float, not rounded down).
+        float frame = (timeSinceImpact - ShockwaveDelay) * SpriteFps;
+        if (frame < 0.0f)
+        {
+            return 0.0f;
+        }
+        if (frame >= frames)
+        {
+            return -1.0f;
+        }
+        // The last frame is fully grown (t = 1); it then stays at that size
+        // until the sprite's last frame ends.
+        float t = frames > 1 ? Mathf.Min(frame / (frames - 1), 1.0f) : 1.0f;
+        float grow = 1.0f - Mathf.Pow(1.0f - t, 3.0f);
+        float pixels = ShockStartPixels + ShockGrowPixels * grow;
+        return pixels / ShockFramePixels * SmashDiameter * ShockwaveScale;
     }
 
     /// <summary>
@@ -348,8 +422,9 @@ public partial class HammerWeapon : Node3D
                 continue;
             }
             cast.VisualTime += dt;
-            // Keep a cast alive until its hit has also happened in physics.
-            if (cast.VisualTime >= _castDuration && cast.Impacted)
+            // Keep a cast alive until its hit and shockwave have also
+            // finished in physics.
+            if (cast.VisualTime >= _castDuration && cast.Impacted && !cast.Wave.Active)
             {
                 cast.Active = false;
             }

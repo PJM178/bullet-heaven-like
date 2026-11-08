@@ -111,6 +111,12 @@ public partial class EnemyManager : Node3D
     private int[] _cellEntries;  // enemy indices, grouped by slot
     private int[] _enemySlot;    // which slot each enemy is in this frame
 
+    // A number unique to each enemy for its whole life, unlike its index
+    // (which changes when others are removed). Lets code remember "I already
+    // hit this one" across physics steps.
+    private int[] _ids;
+    private int _nextId;
+
     private double _animationTimeAccumulated;
 
     // How many enemies are alive (read by the HUD).
@@ -142,6 +148,7 @@ public partial class EnemyManager : Node3D
         _animationPlayers = new AnimationPlayer[MaxEnemies];
         _meshes = new GeometryInstance3D[MaxEnemies][];
         _enemySlot = new int[MaxEnemies];
+        _ids = new int[MaxEnemies];
         _cellEntries = new int[MaxEnemies];
         _cellStart = new int[GridTableSize];
         _cellCount = new int[GridTableSize];
@@ -319,6 +326,8 @@ public partial class EnemyManager : Node3D
         // this slot may have left behind.
         _health[i] = MaxHealth;
         _dead[i] = false;
+        _ids[i] = _nextId;
+        _nextId++;
         // A previous enemy in this slot may have died mid-flash.
         if (_flashTime[i] > 0.0f)
         {
@@ -346,6 +355,13 @@ public partial class EnemyManager : Node3D
     public Vector3 GetPosition(int i) => _positions[i];
 
     /// <summary>
+    /// The lifelong ID of live enemy i. Unlike the index it stays the same
+    /// across physics steps, so it can be stored. No two enemies ever share
+    /// one (it would take billions of spawns to wrap around).
+    /// </summary>
+    public int GetId(int i) => _ids[i];
+
+    /// <summary>
     /// Finds every live enemy overlapping the circle at point with the given
     /// radius (on the ground, height ignored) and writes their indices into
     /// results. Returns how many it found, at most results.Length.
@@ -356,9 +372,25 @@ public partial class EnemyManager : Node3D
     /// </summary>
     public int QueryCircle(Vector3 point, float radius, int[] results)
     {
+        // A circle is a ring with no hole in the middle.
+        return QueryRing(point, 0.0f, radius, results);
+    }
+
+    /// <summary>
+    /// Like QueryCircle, but leaves out enemies that already overlapped the
+    /// smaller circle of innerRadius. Used by an expanding wave: each step
+    /// it asks only for the enemies its edge has newly reached, so it hits
+    /// each one once and a crowd inside it can't fill up the results.
+    /// </summary>
+    public int QueryRing(Vector3 point, float innerRadius, float outerRadius, int[] results)
+    {
         int found = 0;
-        float reach = radius + EnemyRadius;
+        float reach = outerRadius + EnemyRadius;
         float reachSquared = reach * reach;
+        // Enemies closer than this were already touching the inner circle.
+        // With no hole (innerRadius 0) nothing is excluded.
+        float innerReach = innerRadius > 0.0f ? innerRadius + EnemyRadius : 0.0f;
+        float innerReachSquared = innerReach * innerReach;
         int cellRange = Mathf.CeilToInt(reach / SeparationRadius);
         int cellX = CellCoord(point.X);
         int cellZ = CellCoord(point.Z);
@@ -381,7 +413,8 @@ public partial class EnemyManager : Node3D
 
                     float offsetX = _positions[j].X - point.X;
                     float offsetZ = _positions[j].Z - point.Z;
-                    if (offsetX * offsetX + offsetZ * offsetZ >= reachSquared)
+                    float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
+                    if (distanceSquared >= reachSquared || distanceSquared < innerReachSquared)
                     {
                         continue;
                     }
@@ -547,6 +580,7 @@ public partial class EnemyManager : Node3D
         deadNode.Visible = false;
 
         _positions[i] = _positions[last];
+        _ids[i] = _ids[last];
         _health[i] = _health[last];
         _dead[i] = _dead[last];
         _flashTime[i] = _flashTime[last];
