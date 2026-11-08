@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://ui/VirtualJoystick.cs" id="3_joystick"]
 [ext_resource type="PackedScene" path="res://ui/stress_test_hud.tscn" id="4_hud"]
 [ext_resource type="PackedScene" path="res://ui/pause_menu.tscn" id="5_pause"]
+[ext_resource type="PackedScene" path="res://ui/level_up_screen.tscn" id="6_levelup"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -82,5 +83,8 @@ ProjectileManager = NodePath("../Layout/GameView/SubViewport/World/ProjectileMan
 XpManager = NodePath("../Layout/GameView/SubViewport/World/XpManager")
 Player = NodePath("../Layout/GameView/SubViewport/World/Player")
 
-[node name="PauseMenu" parent="." node_paths=PackedStringArray("Stats") instance=ExtResource("5_pause")]
+[node name="PauseMenu" parent="." instance=ExtResource("5_pause")]
+
+[node name="LevelUpScreen" parent="." node_paths=PackedStringArray("Stats", "Skills") instance=ExtResource("6_levelup")]
 Stats = NodePath("../Layout/GameView/SubViewport/World/Player/Stats")
+Skills = NodePath("../Layout/GameView/SubViewport/World/Player/Skills")

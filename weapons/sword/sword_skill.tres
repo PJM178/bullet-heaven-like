@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="SkillDefinition" format=3]
+
+[ext_resource type="Script" path="res://skills/SkillDefinition.cs" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+DisplayName = "Sword"
+Description = "Swings at enemies in front of you every second."
+WeaponNodeName = "SwordWeapon"

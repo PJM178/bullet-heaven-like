@@ -14,6 +14,9 @@
 [ext_resource type="Script" path="res://weapons/sword/SwordWeapon.cs" id="15_sword"]
 [ext_resource type="Material" path="res://weapons/sword/sword_slash_material.tres" id="16_slash"]
 [ext_resource type="Script" path="res://player/PlayerStats.cs" id="17_stats"]
+[ext_resource type="Script" path="res://skills/SkillManager.cs" id="24_skills"]
+[ext_resource type="Resource" path="res://weapons/sword/sword_skill.tres" id="25_sword_skill"]
+[ext_resource type="Resource" path="res://weapons/hammer/hammer_skill.tres" id="26_hammer_skill"]
 [ext_resource type="Script" path="res://weapons/hammer/HammerWeapon.cs" id="18_hammer"]
 [ext_resource type="Material" path="res://weapons/hammer/hammer_material.tres" id="19_hammer_sprite"]
 [ext_resource type="Material" path="res://weapons/hammer/hit_material.tres" id="20_hammer_hit"]
@@ -69,6 +72,11 @@ shape = SubResource("CapsuleShape3D_player")
 
 [node name="Stats" type="Node" parent="Player"]
 script = ExtResource("17_stats")
+
+[node name="Skills" type="Node" parent="Player"]
+script = ExtResource("24_skills")
+Pool = [ExtResource("25_sword_skill"), ExtResource("26_hammer_skill")]
+StartingSkills = [ExtResource("25_sword_skill")]
 
 [node name="FacingDebug" type="MeshInstance3D" parent="Player" node_paths=PackedStringArray("Player")]
 script = ExtResource("8_facing")

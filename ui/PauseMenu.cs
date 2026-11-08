@@ -4,8 +4,8 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// The pause screen: dims the game and shows a title and a Resume button.
-/// It opens when the "pause" action is pressed (Esc or Tab), or when the
-/// player gains a level, where it will later offer the upgrade choices.
+/// It opens when the "pause" action is pressed (Esc or Tab). (Level-ups
+/// have their own screen, LevelUpScreen.)
 ///
 /// Pausing uses Godot's built-in pause: setting GetTree().Paused = true
 /// stops _Process / _PhysicsProcess (and input) for every node whose
@@ -15,11 +15,7 @@ namespace BulletHeavenLike;
 /// </summary>
 public partial class PauseMenu : CanvasLayer
 {
-    // The stats whose LeveledUp signal opens this menu.
-    [Export] public PlayerStats Stats;
-
     [Export] public string PausedTitle = "Paused";
-    [Export] public string LevelUpTitle = "Level Up!";
 
     private Label _title;
 
@@ -31,11 +27,6 @@ public partial class PauseMenu : CanvasLayer
         // Hidden and unpaused at the start. A CanvasLayer can be hidden
         // like a Control; everything on it disappears with it.
         Hide();
-
-        if (Stats != null)
-        {
-            Stats.LeveledUp += OnLeveledUp;
-        }
     }
 
     /// <summary>
@@ -49,6 +40,12 @@ public partial class PauseMenu : CanvasLayer
         // key is held, so one press toggles once.
         if (@event.IsActionPressed("pause"))
         {
+            // Something else paused the game (the level-up screen): leave
+            // it alone, or closing this menu would unpause under it.
+            if (!Visible && GetTree().Paused)
+            {
+                return;
+            }
             if (Visible)
             {
                 Close();
@@ -60,13 +57,6 @@ public partial class PauseMenu : CanvasLayer
             // Mark the event as used so nothing else reacts to it.
             GetViewport().SetInputAsHandled();
         }
-    }
-
-    private void OnLeveledUp(int newLevel)
-    {
-        // One big XP pickup can emit LeveledUp several times in a row.
-        // Opening twice is harmless: the second call just sets the same text.
-        Open(LevelUpTitle);
     }
 
     public void Open(string title)

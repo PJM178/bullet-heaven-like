@@ -12,3 +12,6 @@
 *.apk
 *.aab
 *.idsig
+
+# Third-party reference material (ripped game assets): never commit or ship
+/reference/

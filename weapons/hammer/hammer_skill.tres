@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SkillDefinition" format=3]
+
+[ext_resource type="Script" path="res://skills/SkillDefinition.cs" id="1_skill"]
+[ext_resource type="Texture2D" uid="uid://c8ghypws8mj3q" path="res://weapons/hammer/sprites/hammer.png" id="2_sheet"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_icon"]
+atlas = ExtResource("2_sheet")
+region = Rect2(0, 0, 96, 96)
+
+[resource]
+script = ExtResource("1_skill")
+DisplayName = "Hammer Smash"
+Description = "A phantom hammer slams the ground ahead every 3 s, hitting all enemies in the circle."
+Icon = SubResource("AtlasTexture_icon")
+WeaponNodeName = "HammerWeapon"

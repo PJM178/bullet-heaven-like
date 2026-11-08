@@ -42,10 +42,14 @@ core/                  shared by everything (base PS1 shader, hit flash)
 player/                Player, camera, player model
 enemies/               EnemyManager, enemy scenes and models
 weapons/<name>/        one folder per weapon (sword/, projectiles/, ...)
+skills/                SkillDefinition (resource) and SkillManager (learned
+                       skills, random level-up choices); each weapon's
+                       <name>_skill.tres lives in its weapon folder
 pickups/               XP orbs and other collectables
 ui/                    layout, joystick, HUD
 props/                 level decoration
 art/                   Blender sources and generator scripts (.gdignore'd)
+reference/             reference art
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several
