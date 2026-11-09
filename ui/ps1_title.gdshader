@@ -1,8 +1,12 @@
-// The game-over title sign: text on a few big triangles standing in the
-// world, drawn with PS1 affine texture warping and vertex jitter
-// (core/ps1.gdshaderinc), fading in through an ordered dither. Unshaded,
-// so the scene's lighting doesn't dim it. Both sides show the text the
-// right way round.
+// The game-over title sign: text on a strip of big triangles standing in
+// the world, rippling like a banner in the wind. Drawn with PS1 affine
+// texture warping and vertex jitter (core/ps1.gdshaderinc), fading in
+// through an ordered dither. Unshaded, so the scene's lighting doesn't
+// dim it. Both sides show the text the right way round.
+//
+// The ripple is what shows off the warp: each triangle keeps tilting
+// toward and away from the camera, and the PS1 mapping bends the letters
+// across it differently every moment.
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 
@@ -23,9 +27,32 @@ uniform float reveal : hint_range(0.0, 1.0) = 1.0;
 // Size of one dither dot, in screen pixels.
 uniform float dither_size : hint_range(1.0, 12.0) = 4.0;
 
+// The ripple: how far the sign bulges toward/away from the camera and
+// how far it sways up and down (metres), the distance between wave crests
+// (metres) and how fast the waves travel along the sign (crests per
+// second).
+uniform float wave_amplitude = 0.25;
+uniform float wave_lift = 0.015;
+uniform float wave_length = 1.5;
+uniform float wave_speed = 0.3;
+
 varying vec3 affine_uv;
 
 void vertex() {
+	// A wave travelling along the sign (x), pushing it in and out (z).
+	// TAU / wave_length turns metres into radians, so one full sine cycle
+	// spans one wave_length. A second, smaller and slower wave running at
+	// a slant keeps the motion from looking perfectly regular. TIME is
+	// the shader clock in seconds; it keeps running while the game is
+	// paused, so the sign keeps rippling on the death screen.
+	float phase = TAU * (VERTEX.x / wave_length - TIME * wave_speed);
+	VERTEX.z += sin(phase) * wave_amplitude;
+	// A quarter cycle behind the bulge (cos instead of sin), so the word
+	// rolls like a wave rather than just bobbing.
+	VERTEX.y += cos(phase) * wave_lift;
+	VERTEX.z += sin(TAU * ((VERTEX.x + VERTEX.y * 2.0) / (wave_length * 1.7) + TIME * wave_speed * 0.45))
+		* wave_amplitude * 0.35;
+
 	vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	clip = ps1_snap(clip, snap_resolution);
 	POSITION = clip;

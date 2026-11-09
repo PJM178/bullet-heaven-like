@@ -24,8 +24,8 @@ shader_parameter/dither_size = 4.0
 
 [sub_resource type="QuadMesh" id="QuadMesh_title"]
 size = Vector2(3.2, 0.8)
-subdivide_width = 1
-subdivide_depth = 0
+subdivide_width = 7
+subdivide_depth = 1
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_summary"]
 shader = ExtResource("3_reveal")
