@@ -554,6 +554,127 @@ IDLE_BREATHE = {
 }
 IDLE_KEYS = [(0, IDLE_REST), (24, IDLE_BREATHE), (48, IDLE_REST)]
 
+# ---- Death: the hit knocks the body up off its feet, the legs fly out
+# in front, it lands hard on its backside, sags for a beat and slumps back
+# dead. Played once (never looped) when the last heart is lost.
+#
+# The hips are the root bone, so rotating them tips the whole body: -X on
+# the hips leans everything back (and swings the legs up in front). Their
+# "_loc" moves the whole body: up for the hop, then down onto the ground
+# and back (+Y). For bones pointing down (legs, arms), -X swings them
+# forward; for bones pointing up (spine, chest, neck, head), -X tilts them
+# back. Every bone's rotation stacks on its parent's.
+
+DEATH_KEYS = [
+    # Standing, a frame before the hit.
+    (0, IDLE_REST),
+    # The hit: the body is thrown up and back. Head snaps back, the arms
+    # fly forward, the feet come up onto the toes.
+    (2, {
+        "_loc": (0, 0.05, 0.06),
+        "hips": [("X", -6)],
+        "chest": [("X", -14)], "neck": [("X", -8)], "head": [("X", -22)],
+        "upper_arm.L": [("Y", -45), ("X", -30)], "forearm.L": [("X", -30)],
+        "upper_arm.R": [("Y", 45), ("X", -20)], "forearm.R": [("X", -25)],
+        "foot.L": [("X", 25)], "foot.R": [("X", 25)],
+    }),
+    # Off the ground: a jerky hop, already tipping back, legs swinging
+    # forward, arms thrown up.
+    (5, {
+        "_loc": (0, 0.12, 0.16),
+        "hips": [("X", -12)],
+        "chest": [("X", -10)], "neck": [("X", -6)], "head": [("X", -15), ("Z", 8)],
+        "upper_arm.L": [("Y", -70), ("X", -40)], "forearm.L": [("X", -45)],
+        "upper_arm.R": [("Y", 65), ("X", -50)], "forearm.R": [("X", -35)],
+        "thigh.L": [("X", -30)], "shin.L": [("X", 22)], "foot.L": [("X", -10)],
+        "thigh.R": [("X", -18)], "shin.R": [("X", 10)], "foot.R": [("X", -5)],
+    }),
+    # The legs go out from under it and it drops, curling forward on the
+    # way down with the arms reaching back.
+    (8, {
+        "_loc": (0, 0.22, -0.28),
+        "hips": [("X", -30)],
+        "chest": [("X", 6)], "neck": [("X", 4)], "head": [("X", 15)],
+        "upper_arm.L": [("Y", -25), ("X", 30)], "forearm.L": [("X", -15)],
+        "upper_arm.R": [("Y", 25), ("X", 30)], "forearm.R": [("X", -15)],
+        "thigh.L": [("X", -55)], "shin.L": [("X", 18)], "foot.L": [("X", -15)],
+        "thigh.R": [("X", -50)], "shin.R": [("X", 12)], "foot.R": [("X", -15)],
+    }),
+    # Slams down on its backside, legs out in front. The impact throws
+    # the upper body forward over the lap.
+    (11, {
+        "_loc": (0, 0.30, -0.80),
+        "hips": [("X", -14)],
+        "spine": [("X", 6)], "chest": [("X", 16)], "neck": [("X", 6)], "head": [("X", 25)],
+        "upper_arm.L": [("Y", -20), ("X", 15)], "forearm.L": [("X", -10)],
+        "upper_arm.R": [("Y", 20), ("X", 12)], "forearm.R": [("X", -10)],
+        "thigh.L": [("X", -74)], "shin.L": [("X", 8)], "foot.L": [("X", -20)],
+        "thigh.R": [("X", -70)], "shin.R": [("X", 14)], "foot.R": [("X", -20)],
+    }),
+    # A small bounce off the ground; the head drops.
+    (13, {
+        "_loc": (0, 0.30, -0.75),
+        "hips": [("X", -16)],
+        "spine": [("X", 6)], "chest": [("X", 18)], "neck": [("X", 8)], "head": [("X", 32)],
+        "upper_arm.L": [("Y", -22), ("X", 12)], "forearm.L": [("X", -12)],
+        "upper_arm.R": [("Y", 22), ("X", 10)], "forearm.R": [("X", -12)],
+        "thigh.L": [("X", -72)], "shin.L": [("X", 10)], "foot.L": [("X", -20)],
+        "thigh.R": [("X", -68)], "shin.R": [("X", 16)], "foot.R": [("X", -20)],
+    }),
+    # A beat sitting there, swaying, the last strength going.
+    (17, {
+        "_loc": (0, 0.31, -0.80),
+        "hips": [("X", -24)],
+        "spine": [("X", 4)], "chest": [("X", 10)], "neck": [("X", 6)], "head": [("X", 22), ("Z", 10)],
+        "upper_arm.L": [("Y", -22), ("X", 18)], "forearm.L": [("X", -10)],
+        "upper_arm.R": [("Y", 24), ("X", 16)], "forearm.R": [("X", -10)],
+        "thigh.L": [("X", -64)], "shin.L": [("X", 10)], "foot.L": [("X", -20)],
+        "thigh.R": [("X", -60)], "shin.R": [("X", 16)], "foot.R": [("X", -20)],
+    }),
+    # Slumps over backwards. The thighs counter the hips so the legs stay
+    # on the ground; the arms flop out.
+    (21, {
+        "_loc": (0, 0.40, -0.81),
+        "hips": [("X", -60)],
+        "chest": [("X", 4)], "head": [("X", 6)],
+        "upper_arm.L": [("Y", -40), ("X", 20)], "forearm.L": [("X", -15)],
+        "upper_arm.R": [("Y", 40), ("X", 20)], "forearm.R": [("X", -15)],
+        "thigh.L": [("X", -30)], "shin.L": [("X", 8)], "foot.L": [("X", -10)],
+        "thigh.R": [("X", -28)], "shin.R": [("X", 12)], "foot.R": [("X", -10)],
+    }),
+    # Flat on its back; the head knocks against the ground.
+    (24, {
+        "_loc": (0, 0.45, -0.82),
+        "hips": [("X", -86)],
+        "head": [("X", -14)],
+        "upper_arm.L": [("Y", -62)], "forearm.L": [("X", -6)],
+        "upper_arm.R": [("Y", 58)], "forearm.R": [("X", -6)],
+        "thigh.L": [("X", -4)], "shin.L": [("X", 6)],
+        "thigh.R": [("X", -4)], "shin.R": [("X", 8)],
+    }),
+    # A last twitch: a small rebound, one knee comes up.
+    (26, {
+        "_loc": (0, 0.45, -0.79),
+        "hips": [("X", -84)],
+        "head": [("X", 6)],
+        "upper_arm.L": [("Y", -66), ("X", 6)], "forearm.L": [("X", -6)],
+        "upper_arm.R": [("Y", 52)], "forearm.R": [("X", -6)],
+        "thigh.L": [("X", -4)], "shin.L": [("X", 6)],
+        "thigh.R": [("X", -18), ("Y", 6)], "shin.R": [("X", 36)],
+    }),
+    # Still. The head rolls to one side, the knee sinks back down.
+    (30, {
+        "_loc": (0, 0.45, -0.82),
+        "hips": [("X", -86)],
+        "spine": [("Z", 4)],
+        "head": [("X", -4), ("Z", 50)],
+        "upper_arm.L": [("Y", -70), ("X", 8)], "forearm.L": [("X", -6)],
+        "upper_arm.R": [("Y", 46)], "forearm.R": [("X", -6)],
+        "thigh.L": [("X", -5), ("Y", -6)], "shin.L": [("X", 6)],
+        "thigh.R": [("X", -10), ("Y", 8)], "shin.R": [("X", 22)],
+    }),
+]
+
 # name -> (keys, how to move between keys). "LINEAR" gives the even,
 # mechanical motion of the run; "AUTO" is smooth Bezier for the idle.
 ANIMATIONS = {
@@ -562,6 +683,7 @@ ANIMATIONS = {
     "strafe_right": (STRAFE_KEYS, "LINEAR"),
     "strafe_left": (STRAFE_LEFT_KEYS, "LINEAR"),
     "idle": (IDLE_KEYS, "AUTO"),
+    "death": (DEATH_KEYS, "LINEAR"),
 }
 
 # The clips Godot blends by direction; previews render a strip of each.
@@ -761,6 +883,18 @@ def render_previews(out_dir):
             aim(deg, elev)
             render_strip(scene, frames,
                          os.path.join(out_dir, f"{anim_name}_{name}.png"))
+
+    # The death clip, every key in order. It ends lying flat, so use wider
+    # tiles framed on the ground.
+    scene.render.resolution_x = 420
+    scene.render.resolution_y = 420
+    cam_data.ortho_scale = 2.6
+    target.z = 0.7
+    rig.animation_data.action = bpy.data.actions["death"]
+    frames = [f for f, _ in DEATH_KEYS]
+    for name, (deg, elev) in {"side": (90, 5), "game": (45, 30)}.items():
+        aim(deg, elev)
+        render_strip(scene, frames, os.path.join(out_dir, f"death_{name}.png"))
     rig.animation_data.action = run_action
 
 

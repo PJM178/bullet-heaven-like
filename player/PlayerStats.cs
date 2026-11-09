@@ -107,6 +107,21 @@ public partial class PlayerStats : Node
         return true;
     }
 
+    /// <summary>
+    /// Takes every remaining heart at once, ignoring invulnerability. For
+    /// the debug Die button, and anything later that should kill outright.
+    /// </summary>
+    public void Kill()
+    {
+        if (IsDead)
+        {
+            return;
+        }
+        Health = 0;
+        EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
+        EmitSignal(SignalName.Died);
+    }
+
     /// <summary>Restores hearts, up to MaxHealth. For healing pickups later.</summary>
     public void Heal(int hearts = 1)
     {

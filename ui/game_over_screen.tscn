@@ -1,22 +1,103 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://ui/GameOverScreen.cs" id="1_gameover"]
+[ext_resource type="Shader" path="res://ui/death_fade.gdshader" id="2_fade"]
+[ext_resource type="Shader" path="res://ui/dither_reveal.gdshader" id="3_reveal"]
+[ext_resource type="Shader" path="res://ui/ps1_title.gdshader" id="4_title"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fade"]
+shader = ExtResource("2_fade")
+shader_parameter/amount = 0.0
+shader_parameter/tint = Vector3(0.78, 0.74, 0.7)
+shader_parameter/darkness = 0.5
+shader_parameter/vignette = 0.9
+shader_parameter/pixel_size = 4.0
+shader_parameter/levels = 8.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_title"]
+render_priority = 0
+shader = ExtResource("4_title")
+shader_parameter/affine_strength = 1.0
+shader_parameter/snap_resolution = Vector2(480, 216)
+shader_parameter/reveal = 0.0
+shader_parameter/dither_size = 4.0
+
+[sub_resource type="QuadMesh" id="QuadMesh_title"]
+size = Vector2(3.2, 0.8)
+subdivide_width = 1
+subdivide_depth = 0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_summary"]
+shader = ExtResource("3_reveal")
+shader_parameter/reveal = 0.0
+shader_parameter/pixel_size = 3.0
+
+[sub_resource type="FontVariation" id="FontVariation_title"]
+spacing_glyph = 18
 
 [node name="GameOverScreen" type="CanvasLayer"]
 process_mode = 3
 layer = 20
 script = ExtResource("1_gameover")
+TitleMesh = SubResource("QuadMesh_title")
+TitleMaterial = SubResource("ShaderMaterial_title")
 
-[node name="Dim" type="ColorRect" parent="."]
+[node name="Fade" type="ColorRect" parent="."]
+unique_name_in_owner = true
+material = SubResource("ShaderMaterial_fade")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.12, 0, 0, 0.7)
+mouse_filter = 2
+
+[node name="SignView" type="TextureRect" parent="."]
+unique_name_in_owner = true
+texture_filter = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+
+[node name="SignViewport" type="SubViewport" parent="."]
+unique_name_in_owner = true
+transparent_bg = true
+render_target_update_mode = 0
+
+[node name="SignCamera" type="Camera3D" parent="SignViewport"]
+unique_name_in_owner = true
+cull_mask = 524288
+
+[node name="TitleTextViewport" type="SubViewport" parent="."]
+unique_name_in_owner = true
+transparent_bg = true
+size = Vector2i(640, 160)
+render_target_update_mode = 0
+
+[node name="TitleText" type="Label" parent="TitleTextViewport"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.66, 0.36, 0.27, 1)
+theme_override_colors/font_shadow_color = Color(0.05, 0.03, 0.03, 1)
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 5
+theme_override_fonts/font = SubResource("FontVariation_title")
+theme_override_font_sizes/font_size = 84
+text = "OVERRUN"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="Center" type="CenterContainer" parent="."]
 anchors_preset = 15
+anchor_top = 0.62
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -25,31 +106,23 @@ mouse_filter = 2
 
 [node name="Rows" type="VBoxContainer" parent="Center"]
 layout_mode = 2
-theme_override_constants/separation = 40
-
-[node name="Title" type="Label" parent="Center/Rows"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.85, 0.2, 0.15, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 12
-theme_override_font_sizes/font_size = 72
-text = "You Died"
-horizontal_alignment = 1
+mouse_filter = 2
+theme_override_constants/separation = 28
 
 [node name="Summary" type="Label" parent="Center/Rows"]
 unique_name_in_owner = true
+material = SubResource("ShaderMaterial_summary")
 layout_mode = 2
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 36
-text = "Level 1   Kills 0"
+theme_override_colors/font_color = Color(0.72, 0.69, 0.64, 1)
+theme_override_font_sizes/font_size = 34
+text = "Level 1     0 slain"
 horizontal_alignment = 1
 
 [node name="RestartButton" type="Button" parent="Center/Rows"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(320, 110)
+custom_minimum_size = Vector2(320, 100)
 layout_mode = 2
 size_flags_horizontal = 4
 focus_mode = 0
-theme_override_font_sizes/font_size = 40
-text = "Restart"
+theme_override_font_sizes/font_size = 36
+text = "Rise again"

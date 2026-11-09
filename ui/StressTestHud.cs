@@ -34,6 +34,8 @@ public partial class StressTestHud : CanvasLayer
         // "() => ..." lambdas are tiny inline methods.
         GetNode<Button>("%LessButton").Pressed += () => ChangeTarget(-Step);
         GetNode<Button>("%MoreButton").Pressed += () => ChangeTarget(Step);
+        // Lose every heart at once, to test the death sequence.
+        GetNode<Button>("%DieButton").Pressed += () => Player?.Stats.Kill();
     }
 
     private void ChangeTarget(int amount)

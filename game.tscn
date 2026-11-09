@@ -94,6 +94,7 @@ Player = NodePath("../Layout/GameView/SubViewport/World/Player")
 Stats = NodePath("../Layout/GameView/SubViewport/World/Player/Stats")
 Skills = NodePath("../Layout/GameView/SubViewport/World/Player/Skills")
 
-[node name="GameOverScreen" parent="." node_paths=PackedStringArray("Stats", "Enemies") instance=ExtResource("8_gameover")]
+[node name="GameOverScreen" parent="." node_paths=PackedStringArray("Stats", "Enemies", "Camera") instance=ExtResource("8_gameover")]
 Stats = NodePath("../Layout/GameView/SubViewport/World/Player/Stats")
 Enemies = NodePath("../Layout/GameView/SubViewport/World/EnemyManager")
+Camera = NodePath("../Layout/GameView/SubViewport/World/Camera3D")

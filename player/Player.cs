@@ -52,6 +52,7 @@ public partial class Player : CharacterBody3D
     private static readonly StringName RunBackAnimation = "run_back";
     private static readonly StringName StrafeLeftAnimation = "strafe_left";
     private static readonly StringName StrafeRightAnimation = "strafe_right";
+    private static readonly StringName DeathAnimation = "death";
 
     // Where the AnimationTree keeps the blend space's position. Every node
     // in a tree exposes its settings under "parameters/...".
@@ -93,6 +94,12 @@ public partial class Player : CharacterBody3D
     // player is invulnerable after a hit.
     [Export] public float HurtBlinkRate = 10.0f;
     private double _hurtBlinkTime;
+
+    // Playback speed of the death clip (1 = as made in Blender). It plays
+    // in real time, unaffected by the death slow-motion around it.
+    [Export] public float DeathAnimationSpeed = 1.0f;
+
+    private AnimationPlayer _animationPlayer;
 
     // Mouse aiming (desktop only). The latest mouse position, in the 3D
     // view's own pixels (GameLayout passes the mouse events in), and
@@ -163,6 +170,7 @@ public partial class Player : CharacterBody3D
         _camera = GetViewport().GetCamera3D();
         Stats = GetNode<PlayerStats>("Stats");
         Stats.LeveledUp += OnLeveledUp;
+        Stats.Died += OnDied;
 
         // On Android, Godot turns every touch into a fake mouse event too
         // ("Emulate Mouse From Touch"), so the cursor would jump to the
@@ -173,10 +181,53 @@ public partial class Player : CharacterBody3D
         // it to the given type. The AnimationPlayer lives inside the
         // imported player.glb scene, which is instanced as "Model".
         _model = GetNode<Node3D>("Model");
-        SetUpAnimationTree(GetNode<AnimationPlayer>("Model/AnimationPlayer"));
+        _animationPlayer = GetNode<AnimationPlayer>("Model/AnimationPlayer");
+        SetUpAnimationTree(_animationPlayer);
     }
 
     // Placeholder until there's a level-up screen to open from here.
+    /// <summary>
+    /// Plays the death clip (made in art/tools/make_player.py): the body
+    /// jerks from the hit, hops, crumples to its knees and falls face down.
+    ///
+    /// The AnimationTree only knows the movement blend, so it is switched
+    /// off and the AnimationPlayer plays the clip directly. Switching
+    /// straight from the running pose to the hit is a sudden snap, which
+    /// is exactly the jolt we want here.
+    /// </summary>
+    private void OnDied()
+    {
+        _animationTree.Active = false;
+
+        // Manual: the AnimationPlayer doesn't move on its own; ShowDeathPose
+        // seeks it to the time we choose.
+        _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+        _animationPlayer.Play(DeathAnimation);
+
+        // A Tween counts time for us. The game slows down and then pauses
+        // during the death screen; the clip must keep playing in real time
+        // through both, hence the pause mode and IgnoreTimeScale.
+        float length = (float)_animationPlayer.GetAnimation(DeathAnimation).Length;
+        Tween tween = CreateTween();
+        tween.SetPauseMode(Tween.TweenPauseMode.Process);
+        tween.SetIgnoreTimeScale(true);
+        tween.TweenMethod(Callable.From<float>(ShowDeathPose), 0.0f, length,
+            length / Mathf.Max(DeathAnimationSpeed, 0.01f));
+    }
+
+    private void ShowDeathPose(float time)
+    {
+        // Snap to whole steps of 1 / AnimationFps, so the death has the
+        // same choppy PS1 rhythm as the rest of the animation.
+        if (AnimationFps > 0.0f)
+        {
+            time = Mathf.Floor(time * AnimationFps) / AnimationFps;
+        }
+        // "update: true" applies the pose right away, even though the
+        // player isn't advancing on its own.
+        _animationPlayer.Seek(time, true);
+    }
+
     private void OnLeveledUp(int newLevel)
     {
         GD.Print($"Level up! Now level {newLevel}");
@@ -272,6 +323,12 @@ public partial class Player : CharacterBody3D
         // stepped look and the playback pace.
         _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
 
+        // Dead: the death clip is playing instead (see OnDied).
+        if (Stats.IsDead)
+        {
+            return;
+        }
+
         if (AnimationFps <= 0.0f)
         {
             // Smooth mode: advance every frame.
@@ -302,7 +359,8 @@ public partial class Player : CharacterBody3D
     /// </summary>
     private void UpdateHurtBlink(double delta)
     {
-        if (!Stats.IsInvulnerable)
+        // No blinking on the killing blow: the death should read clearly.
+        if (!Stats.IsInvulnerable || Stats.IsDead)
         {
             _hurtBlinkTime = 0.0;
             _model.Visible = true;
@@ -329,7 +387,11 @@ public partial class Player : CharacterBody3D
         // wouldn't come out as the slow speed the joystick meant.
         // (Vector2 and Vector3 are structs, value types, so creating them
         // every frame doesn't allocate memory.)
-        Vector2 input = Input.GetVector(MoveLeft, MoveRight, MoveUp, MoveDown, 0.0f);
+        // Once dead the character stops listening to the controls and
+        // just stands while the game-over screen plays out.
+        Vector2 input = Stats.IsDead
+            ? Vector2.Zero
+            : Input.GetVector(MoveLeft, MoveRight, MoveUp, MoveDown, 0.0f);
         Vector3 direction = ScreenToGround(input);
 
         // Velocity is a property of CharacterBody3D. MoveAndSlide() moves the
@@ -341,7 +403,11 @@ public partial class Player : CharacterBody3D
 
         // "out" lets a method hand back an extra value besides its return
         // value: here, whether something is aiming (the bool) and where.
-        if (TryGetAim(out Vector3 aim))
+        if (Stats.IsDead)
+        {
+            // Don't turn while falling over.
+        }
+        else if (TryGetAim(out Vector3 aim))
         {
             // An aim of zero means "keep facing as you are" (the cursor is
             // right on top of the character), so don't turn.

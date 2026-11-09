@@ -22,6 +22,26 @@ public partial class CameraFollow : Camera3D
     // choppy reads as a jolt (and suits the PS1 look) rather than a blur.
     [Export] public float ShakeRate = 30.0f;
 
+    // The death shot: when the target's PlayerStats reports death, the
+    // camera swoops in close to the body and slowly circles it. How close
+    // it ends up (as a share of the normal distance), how much lower it
+    // drops (0 = same angle, 1 = level with the ground), how fast it
+    // circles (degrees per second; 0 = holds still) and how long the swoop
+    // in takes (seconds).
+    [Export(PropertyHint.Range, "0.1,1,0.05")] public float DeathZoom = 0.18f;
+    [Export(PropertyHint.Range, "0,1,0.05")] public float DeathLower = 0.4f;
+    [Export] public float DeathOrbitSpeed = 22.0f;
+    [Export] public float DeathZoomDuration = 3.0f;
+
+    // The death shot looks at a point this high above the body (metres),
+    // so the body and the title sign over it both fit in view.
+    [Export] public float DeathFocusHeight = 1.0f;
+
+    private bool _deathShot;
+    private float _deathTime;
+    private float _deathStartAngle;
+
+
     // Camera position relative to the target, measured once at the start.
     private Vector3 _offset;
 
@@ -55,18 +75,24 @@ public partial class CameraFollow : Camera3D
     // never fights with the following in _PhysicsProcess.
     public override void _Process(double delta)
     {
-        if (_shakeLeft <= 0.0f)
-        {
-            return;
-        }
-
-        // Hit-stop (see HammerWeapon) slows the game clock right as a shake
-        // starts. Dividing by the time scale gives real seconds, so the
-        // shake plays during the freeze, which is what sells the hit.
+        // Hit-stop (see HammerWeapon) and the death slow-motion slow the
+        // game clock. Dividing by the time scale gives real seconds, so the
+        // shake and the death shot play at their own pace regardless.
         float dt = (float)delta;
         if (Engine.TimeScale > 0.0)
         {
             dt /= (float)Engine.TimeScale;
+        }
+
+        if (_deathShot)
+        {
+            UpdateDeathShot(dt);
+            return;
+        }
+
+        if (_shakeLeft <= 0.0f)
+        {
+            return;
         }
 
         _shakeLeft -= dt;
@@ -103,6 +129,57 @@ public partial class CameraFollow : Camera3D
         }
 
         _offset = GlobalPosition - Target.GlobalPosition;
+
+        // Listen for the player's death. The stats are a child of the
+        // target, which already exists when this _Ready runs.
+        PlayerStats stats = Target.GetNodeOrNull<PlayerStats>("Stats");
+        if (stats != null)
+        {
+            stats.Died += StartDeathShot;
+        }
+    }
+
+    private void StartDeathShot()
+    {
+        _deathShot = true;
+        _deathTime = 0.0f;
+        // Start circling from where the camera already is, so there's no
+        // jump. Atan2 gives the angle of the offset seen from above.
+        _deathStartAngle = Mathf.Atan2(_offset.X, _offset.Z);
+        // The game is paused about a second into the death screen. "Always"
+        // keeps this camera's _Process running through the pause so the
+        // shot keeps moving over the frozen scene.
+        ProcessMode = ProcessModeEnum.Always;
+        HOffset = 0.0f;
+        VOffset = 0.0f;
+        _shakeLeft = 0.0f;
+    }
+
+    /// <summary>
+    /// Moves the camera along the death shot: closer and lower over
+    /// DeathZoomDuration while circling the body.
+    /// </summary>
+    private void UpdateDeathShot(float dt)
+    {
+        _deathTime += dt;
+
+        // 0 -> 1 over the zoom, eased so it settles in gently at the end.
+        float t = Mathf.Clamp(_deathTime / DeathZoomDuration, 0.0f, 1.0f);
+        t = 1.0f - (1.0f - t) * (1.0f - t);
+
+        // Split the normal offset into "how far out" and "how high", then
+        // shrink both and drop the height a bit extra.
+        float flat = new Vector2(_offset.X, _offset.Z).Length() * Mathf.Lerp(1.0f, DeathZoom, t);
+        float height = _offset.Y * Mathf.Lerp(1.0f, DeathZoom * (1.0f - DeathLower), t);
+
+        float angle = _deathStartAngle + Mathf.DegToRad(DeathOrbitSpeed) * _deathTime;
+
+        Vector3 focus = Target.GlobalPosition + new Vector3(0.0f, DeathFocusHeight, 0.0f);
+        GlobalPosition = Target.GlobalPosition
+            + new Vector3(Mathf.Sin(angle) * flat, height, Mathf.Cos(angle) * flat);
+        // LookAt turns the camera to face a point; Vector3.Up says which
+        // way is up, so it doesn't roll.
+        LookAt(focus, Vector3.Up);
     }
 
     // The player moves in _PhysicsProcess, so the camera follows in the same
@@ -110,7 +187,8 @@ public partial class CameraFollow : Camera3D
     // jitter slightly against the background.
     public override void _PhysicsProcess(double delta)
     {
-        if (Target == null)
+        // During the death shot _Process moves the camera instead.
+        if (Target == null || _deathShot)
         {
             return;
         }
