@@ -61,6 +61,14 @@ public partial class EnemyManager : Node3D
     // Where killed enemies drop their experience, and how much each is
     // worth. Without an XpManager, kills just drop nothing.
     [Export] public XpManager XpManager;
+
+    // Hearts an enemy takes when it touches the player, and how close
+    // (centre to centre, in metres) counts as touching. Enemies stop at
+    // StopDistance, and the crowd jostles them a little further out, so
+    // this needs to be somewhat larger than StopDistance.
+    [Export] public int ContactDamage = 1;
+    [Export] public float ContactRange = 0.9f;
+
     [Export] public int XpPerKill = 100;
 
     // How big an enemy counts as for projectile collisions, in metres on
@@ -127,6 +135,10 @@ public partial class EnemyManager : Node3D
     // read it, but only this class can change it.
     public int Kills { get; private set; }
 
+    // The Target's health and XP, found in _Ready. Null if the target has
+    // no PlayerStats child, in which case enemies just don't hurt it.
+    private PlayerStats _targetStats;
+
     public override void _Ready()
     {
         if (EnemyScene == null || Target == null)
@@ -136,6 +148,11 @@ public partial class EnemyManager : Node3D
             SetProcess(false);
             return;
         }
+
+        // GetNodeOrNull returns null instead of erroring when there's no
+        // such child. Children already exist when _Ready runs, so this is
+        // safe even if the Player's own _Ready hasn't run yet.
+        _targetStats = Target.GetNodeOrNull<PlayerStats>("Stats");
 
         // Allocate every array once, at full size. "new" in _Ready is fine;
         // it's doing it every frame that we avoid.
@@ -698,6 +715,7 @@ public partial class EnemyManager : Node3D
     {
         Vector3 targetPosition = Target.GlobalPosition;
         float despawnSquared = DespawnDistance * DespawnDistance;
+        bool touching = false;
 
         for (int i = 0; i < _count; i++)
         {
@@ -716,6 +734,10 @@ public partial class EnemyManager : Node3D
             // 0 at StopDistance, rising to 1 (full speed) ArriveSlowdown
             // metres further out.
             float distance = toTarget.Length();
+            if (distance < ContactRange)
+            {
+                touching = true;
+            }
             float chase = Mathf.Clamp((distance - StopDistance) / ArriveSlowdown, 0.0f, 1.0f);
 
             Vector3 velocity = toTarget.Normalized() * (Speed * chase) + _separation[i] * SeparationStrength;
@@ -728,6 +750,14 @@ public partial class EnemyManager : Node3D
             // setting it once is one call into the engine instead of two.
             float yaw = Mathf.Atan2(velocity.X, velocity.Z);
             _nodes[i].Transform = new Transform3D(new Basis(Vector3.Up, yaw), position);
+        }
+
+        // One touch is enough to cost a heart. TakeDamage ignores it while
+        // the player is still invulnerable from the previous hit, so it is
+        // fine to call it every step something is touching.
+        if (touching && _targetStats != null)
+        {
+            _targetStats.TakeDamage(ContactDamage);
         }
     }
 

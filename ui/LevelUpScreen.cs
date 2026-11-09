@@ -54,6 +54,13 @@ public partial class LevelUpScreen : CanvasLayer
 
     private void OnLeveledUp(int newLevel)
     {
+        // An XP orb picked up on the same step the player died: the
+        // game-over screen has the game paused, so don't open over it
+        // (closing this screen would unpause the game).
+        if (Stats.IsDead)
+        {
+            return;
+        }
         _pendingLevelUps++;
         // Already showing cards: this one waits its turn.
         if (!Visible)

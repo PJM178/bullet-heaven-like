@@ -3,10 +3,10 @@ using Godot;
 namespace BulletHeavenLike;
 
 /// <summary>
-/// The player's progression numbers: experience and level. It lives as a
-/// child node of the Player ("Stats") so the level table can be edited in
-/// the Inspector, and so later stats (health, damage bonuses, ...) have an
-/// obvious home.
+/// The player's numbers: health, experience and level. It lives as a
+/// child node of the Player ("Stats") so the values can be edited in the
+/// Inspector, and so later stats (damage bonuses, ...) have an obvious
+/// home.
 ///
 /// Levelling works off a table, XpPerLevel, where each entry is the XP
 /// needed to go from one level to the next:
@@ -35,6 +35,91 @@ public partial class PlayerStats : Node
     // also appears in the editor's Node > Signals tab. The level-up screen
     // (choosing an upgrade) will hook in here.
     [Signal] public delegate void LeveledUpEventHandler(int newLevel);
+
+    // ---- Health ----------------------------------------------------------
+    // Health is counted in whole hearts. Any hit costs one heart, and after
+    // a hit the player is invulnerable for a moment, so a crowd of enemies
+    // can't take every heart in the same instant.
+
+    // Hearts at the start, and the most the player can have.
+    [Export] public int MaxHealth = 3;
+
+    // Seconds of invulnerability after losing a heart.
+    [Export] public float InvulnerabilityTime = 1.5f;
+
+    // Emitted whenever Health changes, so the hearts on screen only update
+    // when something actually happened instead of checking every frame.
+    [Signal] public delegate void HealthChangedEventHandler(int health, int maxHealth);
+
+    // Emitted once, when Health reaches 0. The game-over screen listens.
+    [Signal] public delegate void DiedEventHandler();
+
+    /// <summary>Current hearts, from 0 to MaxHealth.</summary>
+    public int Health { get; private set; }
+
+    /// <summary>True once Health has reached 0.</summary>
+    public bool IsDead => Health <= 0;
+
+    /// <summary>
+    /// True for a short while after a hit, when further hits are ignored.
+    /// The Player blinks while this is true.
+    /// </summary>
+    public bool IsInvulnerable => _invulnerableTimeLeft > 0.0f;
+
+    private float _invulnerableTimeLeft;
+
+    public override void _Ready()
+    {
+        Health = MaxHealth;
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        // Count the invulnerability down. Physics process, because the
+        // damage that it blocks is dealt in the physics step too.
+        if (_invulnerableTimeLeft > 0.0f)
+        {
+            _invulnerableTimeLeft -= (float)delta;
+        }
+    }
+
+    /// <summary>
+    /// Takes away hearts (usually one), unless the player is still
+    /// invulnerable from the last hit. Returns true if the hit landed.
+    /// </summary>
+    public bool TakeDamage(int hearts = 1)
+    {
+        // "hearts = 1" is a default value: TakeDamage() means one heart.
+        if (hearts <= 0 || IsDead || IsInvulnerable)
+        {
+            return false;
+        }
+
+        // Mathf.Max keeps it from going below 0.
+        Health = Mathf.Max(Health - hearts, 0);
+        _invulnerableTimeLeft = InvulnerabilityTime;
+        EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
+
+        if (IsDead)
+        {
+            EmitSignal(SignalName.Died);
+        }
+        return true;
+    }
+
+    /// <summary>Restores hearts, up to MaxHealth. For healing pickups later.</summary>
+    public void Heal(int hearts = 1)
+    {
+        if (hearts <= 0 || IsDead)
+        {
+            return;
+        }
+
+        Health = Mathf.Min(Health + hearts, MaxHealth);
+        EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
+    }
+
+    // ---- Experience ------------------------------------------------------
 
     /// <summary>The current level. Everyone starts at level 1.</summary>
     public int Level { get; private set; } = 1;

@@ -89,6 +89,11 @@ public partial class Player : CharacterBody3D
     // so those two directions are different.
     private Camera3D _camera;
 
+    // How many times a second the model blinks on and off while the
+    // player is invulnerable after a hit.
+    [Export] public float HurtBlinkRate = 10.0f;
+    private double _hurtBlinkTime;
+
     // Mouse aiming (desktop only). The latest mouse position, in the 3D
     // view's own pixels (GameLayout passes the mouse events in), and
     // whether the mouse has moved at all yet. Until it has, the character
@@ -260,6 +265,8 @@ public partial class Player : CharacterBody3D
     // purely visual updates like the animation pose.
     public override void _Process(double delta)
     {
+        UpdateHurtBlink(delta);
+
         // "Manual" stops the AnimationTree from advancing on its own; it
         // only moves when we call Advance(). That way we control both the
         // stepped look and the playback pace.
@@ -287,6 +294,25 @@ public partial class Player : CharacterBody3D
             // Keep the leftover fraction so the rhythm stays even.
             _animationTimeAccumulated -= steps * step;
         }
+    }
+
+    /// <summary>
+    /// Blinks the model while the player can't be hurt, so it's clear that
+    /// a hit landed and that touching enemies is safe for a moment.
+    /// </summary>
+    private void UpdateHurtBlink(double delta)
+    {
+        if (!Stats.IsInvulnerable)
+        {
+            _hurtBlinkTime = 0.0;
+            _model.Visible = true;
+            return;
+        }
+
+        // The whole part of (time * rate) counts up 0, 1, 2, ... rate times
+        // a second; "% 2 == 0" makes it alternate visible / hidden.
+        _hurtBlinkTime += delta;
+        _model.Visible = (int)(_hurtBlinkTime * HurtBlinkRate * 2.0) % 2 == 0;
     }
 
     public override void _PhysicsProcess(double delta)

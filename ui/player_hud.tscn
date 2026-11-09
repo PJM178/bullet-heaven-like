@@ -1,0 +1,17 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/PlayerHud.cs" id="1_hud"]
+
+[node name="PlayerHud" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Hearts" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_top = 20.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+alignment = 1
