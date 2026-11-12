@@ -49,7 +49,10 @@ pickups/               XP orbs and other collectables
 ui/                    layout, joystick, HUD
 props/                 level decoration
 art/                   Blender sources and generator scripts (.gdignore'd)
-reference/             reference art
+addons/sprite_kit/     .spritesheet importer -> SpriteFrames, DirectionalSprite3D /
+                       SpriteDirections, KeyframeEffect (.str effect player)
+local_assets/          local sprites/effects used in-game (git-ignored, but
+                       exported): monsters/, players/, effects/<name>/ (*.bin)
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several
@@ -59,6 +62,13 @@ weapons goes in `weapons/` itself. All C# stays in the single
 Move or rename files with the Godot editor's FileSystem dock, which updates
 references. From outside the editor (editor closed), `git mv` the file
 together with its `.uid` / `.import` sidecars and rewrite its `res://` paths.
+
+## Local assets
+
+`local_assets/` and `research/` are not committed, so committed scenes must
+not reference them directly: load by path if present (`FramesPath`,
+`core/OptionalScene.cs`). Where the assets come from and how to bake them is in
+`CLAUDE.local.md` (git-ignored).
 
 ## Code conventions
 

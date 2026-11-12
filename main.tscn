@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://vf3eeiw720ly"]
 
 [ext_resource type="Script" uid="uid://g643fx74r04c" path="res://player/Player.cs" id="1_player"]
-[ext_resource type="PackedScene" uid="uid://v7q7fr2bbfca" path="res://player/player.glb" id="2_model"]
+[ext_resource type="Script" uid="uid://cnrtic5udeyxh" path="res://addons/sprite_kit/DirectionalSprite3D.cs" id="2_sprite"]
 [ext_resource type="Script" path="res://player/CameraFollow.cs" id="3_camera"]
 [ext_resource type="PackedScene" path="res://props/bush.tscn" id="4_bush"]
 [ext_resource type="PackedScene" path="res://enemies/slime.tscn" id="5_slime"]
@@ -23,6 +23,7 @@
 [ext_resource type="Material" path="res://weapons/hammer/ripple_material.tres" id="21_hammer_ripple"]
 [ext_resource type="Material" path="res://weapons/hammer/shockwave_material.tres" id="22_hammer_shockwave"]
 [ext_resource type="Material" path="res://weapons/hammer/chunks_material.tres" id="23_hammer_chunks"]
+[ext_resource type="Script" path="res://core/OptionalScene.cs" id="90_optional"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -64,7 +65,12 @@ mesh = SubResource("PlaneMesh_ground")
 [node name="Player" type="CharacterBody3D" parent="." unique_id=836155113]
 script = ExtResource("1_player")
 
-[node name="Model" parent="Player" unique_id=1328809781 instance=ExtResource("2_model")]
+[node name="Model" type="Node3D" parent="Player" unique_id=1328809781]
+
+[node name="Sprite" type="AnimatedSprite3D" parent="Player/Model"]
+pixel_size = 0.02
+script = ExtResource("2_sprite")
+FramesPath = "res://local_assets/players/player_m.spritesheet"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=51307331]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
@@ -97,6 +103,10 @@ HitMaterial = ExtResource("20_hammer_hit")
 RippleMaterial = ExtResource("21_hammer_ripple")
 ShockwaveMaterial = ExtResource("22_hammer_shockwave")
 DebrisMaterial = ExtResource("23_hammer_chunks")
+
+[node name="LocalExtras" type="Node" parent="Player"]
+script = ExtResource("90_optional")
+ScenePath = "res://research/player_extras.tscn"
 
 [node name="Bush" parent="." instance=ExtResource("4_bush")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)

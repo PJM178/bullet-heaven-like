@@ -7,9 +7,9 @@ namespace BulletHeavenLike;
 /// <summary>
 /// The player character. Moves along the ground in the screen direction of
 /// the move_left / move_right / move_up / move_down actions (WASD, the arrow
-/// keys or the left-hand stick). Its legs animate by the direction it moves
-/// *relative to where it faces*: run forward, backpedal, or strafe, blended
-/// for diagonals (see SetUpAnimationTree).
+/// keys or the left-hand stick). It is drawn as a baked sprite sheet (a
+/// DirectionalSprite3D, see addons/sprite_kit/) that shows one of 8 facing
+/// directions and plays idle, walk, hurt and die (see UpdateAnimation).
 ///
 /// Facing (which is also where weapons fire, see Forward) is chosen in
 /// this order:
@@ -30,33 +30,31 @@ public partial class Player : CharacterBody3D
     // snappier; it's a rate, not degrees, see _PhysicsProcess.
     [Export] public float TurnSpeed = 14.0f;
 
-    // How quickly the legs blend to a new movement animation (idle -> run,
-    // run -> strafe, ...). Higher is snappier; a rate like TurnSpeed.
-    [Export] public float AnimationBlendSpeed = 15.0f;
-
-    // How many times per second the character's pose updates. A low value
-    // (around 10-15) gives the choppy, stepped look of PS1-era games, while
-    // movement and the rest of the game stay smooth. 0 = update every frame.
-    [Export] public float AnimationFps = 12.0f;
+    // How fast the walk cycle plays (1 = the speed baked into the sprite).
+    // Raise it if the feet look like they slide at full speed, lower it if
+    // the legs look too busy.
+    [Export] public float WalkAnimationSpeed = 1.0f;
 
     // When moving slower than full speed (a light push on the joystick),
     // the legs slow down to match, so the feet don't slide. They never go
     // slower than this fraction of normal pace, so the steps still read.
     [Export(PropertyHint.Range, "0.1,1,0.05")] public float MinLegPace = 0.35f;
 
-    // Animation names, as exported from Blender. A StringName is Godot's
-    // fast, interned string type. Creating it once here ("static readonly")
-    // avoids converting a C# string to a StringName every frame.
-    private static readonly StringName IdleAnimation = "idle";
-    private static readonly StringName RunAnimation = "run";
-    private static readonly StringName RunBackAnimation = "run_back";
-    private static readonly StringName StrafeLeftAnimation = "strafe_left";
-    private static readonly StringName StrafeRightAnimation = "strafe_right";
-    private static readonly StringName DeathAnimation = "death";
+    // How long (seconds) the flinch pose shows after taking a hit. 0 turns
+    // it off. The character keeps moving during it; only the pose changes.
+    [Export] public float HurtPoseTime = 0.3f;
 
-    // Where the AnimationTree keeps the blend space's position. Every node
-    // in a tree exposes its settings under "parameters/...".
-    private static readonly StringName BlendPositionParameter = "parameters/blend_position";
+    // Animation names in the .spritesheet. DirectionalSprite3D adds the
+    // direction itself ("walk" -> "walk_SW"). These are const strings:
+    // compile-time constants, so passing them every frame allocates nothing.
+    private const string IdleAnimation = "idle";
+    private const string WalkAnimation = "walk";
+    private const string HurtAnimation = "hurt";
+    private const string DieAnimation = "die";
+
+    // Input action names. A StringName is Godot's fast, interned string
+    // type. Creating it once here ("static readonly") avoids converting a
+    // C# string to a StringName every frame.
     private static readonly StringName MoveLeft = "move_left";
     private static readonly StringName MoveRight = "move_right";
     private static readonly StringName MoveUp = "move_up";
@@ -66,24 +64,22 @@ public partial class Player : CharacterBody3D
     private static readonly StringName AimUp = "aim_up";
     private static readonly StringName AimDown = "aim_down";
 
-    // The imported model (a child node). We rotate only the model, not the
-    // whole body, so the collision shape and camera maths stay simple.
+    // An invisible pivot (a plain Node3D child) that turns to face where
+    // the character faces. Forward and Right read their directions from it.
+    // The sprite inside it is a billboard, which always turns to the camera
+    // whatever its parent's rotation, so the pivot's turning only decides
+    // *which* of the 8 drawn directions the sprite shows.
     private Node3D _model;
 
-    // Mixes the movement animations by direction (see SetUpAnimationTree).
-    private AnimationTree _animationTree;
+    // The sprite, a child of Model named "Sprite".
+    private DirectionalSprite3D _sprite;
 
-    // The blend position we're currently showing. It glides toward the
-    // target each frame instead of jumping, which is what cross-fades
-    // between animations.
-    private Vector2 _blendPosition;
+    // Seconds of flinch pose left (see HurtPoseTime and OnHealthChanged).
+    private float _hurtPoseLeft;
 
-    // Game time collected since the pose was last updated (see _Process).
-    private double _animationTimeAccumulated;
+    // Health at the last HealthChanged, to tell a hit from a heal.
+    private int _lastHealth;
 
-    // How fast the animation plays right now: 1 = normal, lower while
-    // moving slowly (see UpdateAnimation and MinLegPace).
-    private float _animationPace = 1.0f;
 
     // The camera viewing the scene. We need it so "left" means left on the
     // *screen*, not along the world X axis. The camera is rotated 45°,
@@ -94,12 +90,6 @@ public partial class Player : CharacterBody3D
     // player is invulnerable after a hit.
     [Export] public float HurtBlinkRate = 10.0f;
     private double _hurtBlinkTime;
-
-    // Playback speed of the death clip (1 = as made in Blender). It plays
-    // in real time, unaffected by the death slow-motion around it.
-    [Export] public float DeathAnimationSpeed = 1.0f;
-
-    private AnimationPlayer _animationPlayer;
 
     // Mouse aiming (desktop only). The latest mouse position, in the 3D
     // view's own pixels (GameLayout passes the mouse events in), and
@@ -171,6 +161,8 @@ public partial class Player : CharacterBody3D
         Stats = GetNode<PlayerStats>("Stats");
         Stats.LeveledUp += OnLeveledUp;
         Stats.Died += OnDied;
+        Stats.HealthChanged += OnHealthChanged;
+        _lastHealth = Stats.Health;
 
         // On Android, Godot turns every touch into a fake mouse event too
         // ("Emulate Mouse From Touch"), so the cursor would jump to the
@@ -178,126 +170,82 @@ public partial class Player : CharacterBody3D
         _mouseAimEnabled = !OS.HasFeature("mobile");
 
         // GetNode<T> finds a node by its path relative to this one and casts
-        // it to the given type. The AnimationPlayer lives inside the
-        // imported player.glb scene, which is instanced as "Model".
+        // it to the given type.
         _model = GetNode<Node3D>("Model");
-        _animationPlayer = GetNode<AnimationPlayer>("Model/AnimationPlayer");
-        SetUpAnimationTree(_animationPlayer);
+        _sprite = GetNode<DirectionalSprite3D>("Model/Sprite");
     }
 
-    // Placeholder until there's a level-up screen to open from here.
     /// <summary>
-    /// Plays the death clip (made in art/tools/make_player.py): the body
-    /// jerks from the hit, hops, crumples to its knees and falls face down.
+    /// Plays the death: the flinch (hurt) frames, then the fallen (die)
+    /// pose, which stays.
     ///
-    /// The AnimationTree only knows the movement blend, so it is switched
-    /// off and the AnimationPlayer plays the clip directly. Switching
-    /// straight from the running pose to the hit is a sudden snap, which
-    /// is exactly the jolt we want here.
+    /// The game slows down and then pauses during the death screen, and
+    /// the sprite would slow and stop with it. So the sprite is paused here
+    /// and a Tween, which can count real time through both, picks the
+    /// frames instead (see ShowDeathFrame).
     /// </summary>
     private void OnDied()
     {
-        _animationTree.Active = false;
+        // No sprite frames (res://local_assets/ missing, e.g. a fresh clone): skip the
+        // death animation; the rest of the death sequence still runs.
+        if (_sprite.SpriteFrames == null)
+        {
+            return;
+        }
 
-        // Manual: the AnimationPlayer doesn't move on its own; ShowDeathPose
-        // seeks it to the time we choose.
-        _animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
-        _animationPlayer.Play(DeathAnimation);
+        _sprite.PlayFacing(HurtAnimation, Forward, _camera);
+        _sprite.Pause();
 
-        // A Tween counts time for us. The game slows down and then pauses
-        // during the death screen; the clip must keep playing in real time
-        // through both, hence the pause mode and IgnoreTimeScale.
-        float length = (float)_animationPlayer.GetAnimation(DeathAnimation).Length;
+        // How long the hurt frames last, from the speed baked into the
+        // sprite (frames per second). The die pose then holds as long as
+        // the hurt part again, after which the Tween is simply done.
+        SpriteFrames frames = _sprite.SpriteFrames;
+        StringName hurt = _sprite.Animation;
+        _deathHurtFrames = frames.GetFrameCount(hurt);
+        _deathFrameTime = 1.0f / (float)Mathf.Max(frames.GetAnimationSpeed(hurt), 1.0);
+        float length = _deathHurtFrames * _deathFrameTime;
+
         Tween tween = CreateTween();
         tween.SetPauseMode(Tween.TweenPauseMode.Process);
         tween.SetIgnoreTimeScale(true);
-        tween.TweenMethod(Callable.From<float>(ShowDeathPose), 0.0f, length,
-            length / Mathf.Max(DeathAnimationSpeed, 0.01f));
+        tween.TweenMethod(Callable.From<float>(ShowDeathFrame), 0.0f, length * 2.0f, length * 2.0f);
     }
 
-    private void ShowDeathPose(float time)
+    // Set in OnDied: how many hurt frames there are and how long each shows.
+    private int _deathHurtFrames;
+    private float _deathFrameTime;
+
+    private void ShowDeathFrame(float time)
     {
-        // Snap to whole steps of 1 / AnimationFps, so the death has the
-        // same choppy PS1 rhythm as the rest of the animation.
-        if (AnimationFps > 0.0f)
+        int frame = (int)(time / _deathFrameTime);
+        if (frame < _deathHurtFrames)
         {
-            time = Mathf.Floor(time * AnimationFps) / AnimationFps;
+            _sprite.Frame = frame;
         }
-        // "update: true" applies the pose right away, even though the
-        // player isn't advancing on its own.
-        _animationPlayer.Seek(time, true);
+        else
+        {
+            // PlayFacing does nothing if "die" is already showing, so
+            // calling it on every step of the Tween is cheap.
+            _sprite.PlayFacing(DieAnimation, Forward, _camera);
+        }
+    }
+
+    /// <summary>
+    /// Shows the flinch pose for a moment when health goes down (but not
+    /// on the killing blow; OnDied handles that).
+    /// </summary>
+    private void OnHealthChanged(int health, int maxHealth)
+    {
+        if (health < _lastHealth && health > 0)
+        {
+            _hurtPoseLeft = HurtPoseTime;
+        }
+        _lastHealth = health;
     }
 
     private void OnLeveledUp(int newLevel)
     {
         GD.Print($"Level up! Now level {newLevel}");
-    }
-
-    /// <summary>
-    /// Builds an AnimationTree that blends the movement animations by the
-    /// direction the character moves relative to where it faces.
-    ///
-    /// The heart of it is a 2D blend space: a square map where each
-    /// animation sits at a point. x is "how much to the character's right",
-    /// y is "how much forward":
-    ///
-    ///                  run (0, 1)
-    ///                      |
-    ///   strafe_left ---- idle ---- strafe_right
-    ///     (-1, 0)        (0, 0)       (1, 0)
-    ///                      |
-    ///               run_back (0, -1)
-    ///
-    /// Each frame we put a marker on that map (the blend position) and the
-    /// tree mixes the nearest animations by distance. Moving forward-right
-    /// lands between run and strafe_right and gets a bit of both.
-    /// </summary>
-    private void SetUpAnimationTree(AnimationPlayer animationPlayer)
-    {
-        // The new clips aren't marked as looping in the import settings,
-        // so loop all the cycles here. This changes the imported animation
-        // in memory only, every time the game starts.
-        StringName[] cycles = { IdleAnimation, RunAnimation, RunBackAnimation, StrafeLeftAnimation, StrafeRightAnimation };
-        foreach (StringName name in cycles)
-        {
-            animationPlayer.GetAnimation(name).LoopMode = Animation.LoopModeEnum.Linear;
-        }
-
-        AnimationNodeBlendSpace2D blendSpace = new();
-        // "Independent" sync keeps every animation in the space playing,
-        // even ones currently mixed in at zero, instead of freezing them.
-        // All the move cycles are the same length and plant the same foot
-        // on the same frame (see make_player.py), so they stay in step and
-        // the feet line up when they blend. (The "Cyclic" modes would also
-        // time-stretch the clips; we don't need that.)
-        blendSpace.SyncMode = AnimationNodeBlendSpace2D.SyncModeEnum.Independent;
-        AddBlendClip(blendSpace, IdleAnimation, Vector2.Zero);
-        AddBlendClip(blendSpace, RunAnimation, new Vector2(0, 1));
-        AddBlendClip(blendSpace, RunBackAnimation, new Vector2(0, -1));
-        AddBlendClip(blendSpace, StrafeRightAnimation, new Vector2(1, 0));
-        AddBlendClip(blendSpace, StrafeLeftAnimation, new Vector2(-1, 0));
-
-        // The tree takes over playing animations from the AnimationPlayer;
-        // the player now just supplies the clips. It goes next to the
-        // AnimationPlayer (under Model) because animation tracks are paths
-        // relative to the model, and the tree resolves them from its parent.
-        _animationTree = new AnimationTree { TreeRoot = blendSpace };
-        _model.AddChild(_animationTree);
-        _animationTree.AnimPlayer = _animationTree.GetPathTo(animationPlayer);
-        _animationTree.Active = true;
-    }
-
-    /// <summary>
-    /// Puts one animation clip at a point in the blend space, naming the
-    /// point after the clip.
-    /// </summary>
-    private static void AddBlendClip(AnimationNodeBlendSpace2D blendSpace, StringName clip, Vector2 position)
-    {
-        // "new T { Property = value }" is an object initializer: create the
-        // object and set properties in one expression. atIndex -1 means
-        // "add at the end".
-        AnimationNodeAnimation node = new() { Animation = clip };
-        blendSpace.AddBlendPoint(node, position, -1, clip);
     }
 
     public override void _Input(InputEvent @event)
@@ -313,44 +261,10 @@ public partial class Player : CharacterBody3D
     // _PhysicsProcess runs at a fixed rate (60 times per second by default),
     // which is the right place for movement and collisions.
     // _Process runs once per rendered frame, which is the right place for
-    // purely visual updates like the animation pose.
+    // purely visual updates like the hurt blink.
     public override void _Process(double delta)
     {
         UpdateHurtBlink(delta);
-
-        // "Manual" stops the AnimationTree from advancing on its own; it
-        // only moves when we call Advance(). That way we control both the
-        // stepped look and the playback pace.
-        _animationTree.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
-
-        // Dead: the death clip is playing instead (see OnDied).
-        if (Stats.IsDead)
-        {
-            return;
-        }
-
-        if (AnimationFps <= 0.0f)
-        {
-            // Smooth mode: advance every frame.
-            _animationTree.Advance(delta * _animationPace);
-            return;
-        }
-
-        // Choppy mode: collect real time, and once a whole step (e.g.
-        // 1/12 s) has passed, jump the animation forward by that many steps
-        // in one go. In between, the pose holds still, which is what makes
-        // it look stepped. The pose still changes AnimationFps times a
-        // second when moving slowly; only how far each jump goes shrinks.
-        _animationTimeAccumulated += delta;
-        double step = 1.0 / AnimationFps;
-        if (_animationTimeAccumulated >= step)
-        {
-            // (int) cuts off the fraction, e.g. 2.7 steps -> 2 whole steps.
-            int steps = (int)(_animationTimeAccumulated / step);
-            _animationTree.Advance(steps * step * _animationPace);
-            // Keep the leftover fraction so the rhythm stays even.
-            _animationTimeAccumulated -= steps * step;
-        }
     }
 
     /// <summary>
@@ -505,34 +419,44 @@ public partial class Player : CharacterBody3D
     }
 
     /// <summary>
-    /// Moves the blend-space marker toward the current movement direction,
-    /// measured in the character's own frame (x = right, y = forward).
+    /// Picks the sprite animation: hurt right after a hit, walk while
+    /// moving, idle otherwise, always drawn in the direction the character
+    /// faces. The sprite's frames are already stepped (the sheets run at
+    /// about 10-13 frames a second), which gives the choppy PS1-era look
+    /// without extra work.
     /// </summary>
     private void UpdateAnimation(Vector3 moveDirection, float delta)
     {
-        // The dot product of two directions says how much one points along
-        // the other: 1 = same way, 0 = at right angles, -1 = opposite. So
-        // these two dots are the movement's "right" and "forward" parts.
-        // Standing still gives (0, 0): idle, in the middle of the map.
-        //
-        // The blend uses the direction only (Normalized, length 1), so even
-        // a slow move plays a full stride rather than a half-faded one. The
-        // speed goes into the playback pace instead: half speed, legs at
-        // half pace (but never below MinLegPace), so the feet keep up with
-        // the ground. Normalized() of a zero vector is zero, so standing
-        // still still gives idle.
+        // Dead: OnDied drives the sprite.
+        if (Stats.IsDead)
+        {
+            return;
+        }
+
+        if (_hurtPoseLeft > 0.0f)
+        {
+            _hurtPoseLeft -= delta;
+            _sprite.SpeedScale = 1.0f;
+            _sprite.PlayFacing(HurtAnimation, Forward, _camera);
+            return;
+        }
+
+        // The input's length is the speed (1 = full speed). Half speed plays
+        // the legs at half pace, but never below MinLegPace.
         float speed = moveDirection.Length();
-        Vector2 target = new Vector2(moveDirection.Dot(Right), moveDirection.Dot(Forward)).Normalized();
-        _animationPace = speed > 0.01f ? Mathf.Max(speed, MinLegPace) : 1.0f;
-
-        // Glide toward it at a steady rate whatever the frame rate (the
-        // same trick as FaceDirection), so changes cross-fade.
-        float weight = 1.0f - Mathf.Exp(-AnimationBlendSpeed * delta);
-        _blendPosition = _blendPosition.Lerp(target, weight);
-
-        // Set takes a Variant, Godot's "any value" type. A Vector2 converts
-        // to one without allocating memory.
-        _animationTree.Set(BlendPositionParameter, _blendPosition);
+        if (speed > 0.01f)
+        {
+            _sprite.SpeedScale = WalkAnimationSpeed * Mathf.Max(speed, MinLegPace);
+            _sprite.PlayFacing(WalkAnimation, Forward, _camera);
+        }
+        else
+        {
+            // The idle isn't a loop: its 3 frames are the head looking
+            // straight, left and right, at speed 0. A fresh Play starts on
+            // frame 0, looking straight ahead, and stays there.
+            _sprite.SpeedScale = 1.0f;
+            _sprite.PlayFacing(IdleAnimation, Forward, _camera);
+        }
     }
 
     /// <summary>

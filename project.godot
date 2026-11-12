@@ -29,6 +29,10 @@ window/handheld/orientation=4
 
 project/assembly_name="BulletHeavenLike"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/sprite_kit/plugin.cfg")
+
 [input]
 
 aim_left={
