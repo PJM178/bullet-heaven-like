@@ -5,7 +5,8 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// A sword that swings automatically on a cooldown, hitting every enemy in
-/// a narrow wedge in front of the player (where Player.Forward points).
+/// a wedge pointing where Targeting aims it (see WeaponTargeting): at the
+/// closest enemy, or where the player faces.
 ///
 /// The hit happens all at once, on the frame the swing starts. The slash
 /// you see, a cartoon swoosh whipping from the character's right to their
@@ -35,6 +36,12 @@ public partial class SwordWeapon : Node3D
     // Total width of the wedge, in degrees, centred on where the player
     // faces: 120 means 60 degrees to either side.
     [Export(PropertyHint.Range, "5,360,1")] public float ArcDegrees = 120.0f;
+
+    // Where the swing points (see WeaponTargeting), and how far away an
+    // enemy can be to be picked. A little past Range, so an enemy whose
+    // body reaches into the swing still counts.
+    [Export] public TargetMode Targeting = TargetMode.ClosestEnemy;
+    [Export] public float TargetRange = 2.5f;
 
     [ExportGroup("Slash visual")]
     // A ShaderMaterial using sword_slash.gdshader (next to this script).
@@ -108,7 +115,7 @@ public partial class SwordWeapon : Node3D
     private void Swing()
     {
         Vector3 origin = Player.GlobalPosition;
-        Vector3 forward = Player.Forward;
+        Vector3 forward = WeaponTargeting.AimDirection(Targeting, Player, EnemyManager, TargetRange);
         float halfArc = Mathf.DegToRad(ArcDegrees * 0.5f);
 
         // First the cheap, broad search: everyone within reach in any

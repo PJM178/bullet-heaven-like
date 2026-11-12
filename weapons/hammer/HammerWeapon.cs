@@ -4,9 +4,10 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// A hammer smash on a long cooldown: a faint phantom hammer swings down
-/// onto a spot in front of the player and hits every enemy in a circle
-/// there. A tribute to the ground-smash skills of classic action RPGs, made
-/// of flat, pixel-art sprite effects (see art/tools/make_hammer_fall_sprites.py).
+/// onto a target spot (the closest enemy, or in front of the player; see
+/// Targeting) and hits every enemy in a circle there. A tribute to the
+/// ground-smash skills of classic action RPGs, made of flat, pixel-art
+/// sprite effects (see art/tools/make_hammer_fall_sprites.py).
 ///
 /// One cast, layer by layer (the sheets in sprites/, all played as stepped
 /// flipbooks at SpriteFps by core/sprite_flipbook.gdshader):
@@ -40,8 +41,15 @@ public partial class HammerWeapon : Node3D
     // smash kills them.
     [Export] public float Damage = 3.0f;
 
-    // The centre of the smash circle, in metres in front of the player.
+    // The centre of the smash circle, in metres in front of the player,
+    // when there's no target (see Targeting).
     [Export] public float SmashDistance = 2.0f;
+
+    // Where the hammer lands (see WeaponTargeting). With a target in
+    // TargetRange it lands right on that enemy; otherwise SmashDistance
+    // in front of the player.
+    [Export] public TargetMode Targeting = TargetMode.ClosestEnemy;
+    [Export] public float TargetRange = 4.0f;
 
     // Width of the smash circle (its diameter), in metres.
     [Export] public float SmashDiameter = 2.0f;
@@ -285,8 +293,22 @@ public partial class HammerWeapon : Node3D
             Impact(cast);
         }
 
-        Vector3 forward = Player.Forward;
-        cast.Target = Player.GlobalPosition + forward * SmashDistance;
+        // Land on the target if there is one, else in front of the player.
+        // "forward" is still needed below (which side the hammer swings
+        // in from), so work it out from wherever the target ended up.
+        Vector3 forward;
+        if (WeaponTargeting.TryFindTarget(Targeting, Player, EnemyManager, TargetRange, out Vector3 target))
+        {
+            cast.Target = new Vector3(target.X, Player.GlobalPosition.Y, target.Z);
+            Vector3 toTarget = cast.Target - Player.GlobalPosition;
+            // An enemy right on top of the player gives no direction.
+            forward = toTarget.LengthSquared() > 0.0001f ? toTarget.Normalized() : Player.Forward;
+        }
+        else
+        {
+            forward = Player.Forward;
+            cast.Target = Player.GlobalPosition + forward * SmashDistance;
+        }
         cast.Active = true;
         cast.Impacted = false;
         cast.Wave.Stop();

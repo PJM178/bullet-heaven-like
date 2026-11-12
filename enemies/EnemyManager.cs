@@ -709,6 +709,41 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
+    /// Returns the index of the live enemy closest to point (on the ground,
+    /// height ignored) that is no further than maxRange, or -1 if none is.
+    /// Like every enemy index, only valid during the current physics step.
+    ///
+    /// A plain loop over every enemy: a few hundred distance checks are
+    /// cheap, and unlike the grid it works at any range.
+    /// </summary>
+    public int FindClosest(Vector3 point, float maxRange)
+    {
+        int closest = -1;
+        // Compare squared distances: same order as real distances, without
+        // a square root per enemy.
+        float bestSquared = maxRange * maxRange;
+
+        for (int i = 0; i < _count; i++)
+        {
+            if (_dead[i])
+            {
+                continue;
+            }
+
+            float offsetX = _positions[i].X - point.X;
+            float offsetZ = _positions[i].Z - point.Z;
+            float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
+            if (distanceSquared < bestSquared)
+            {
+                bestSquared = distanceSquared;
+                closest = i;
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
     /// Returns the index of a live enemy overlapping the circle at point with
     /// the given radius (measured on the ground, height is ignored), or -1
     /// if there is none. Only valid during the current physics step:
