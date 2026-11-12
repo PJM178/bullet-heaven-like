@@ -1,0 +1,15 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" uid="uid://cnrtic5udeyxh" path="res://addons/sprite_kit/DirectionalSprite3D.cs" id="1_sprite"]
+
+; An 8-direction sprite enemy. The frames are loaded by path from the
+; git-ignored local_assets/ (see DirectionalSprite3D.FramesPath). Without
+; them, EnemyManager falls back to its FallbackScene (the slime).
+[node name="BasicEnemy" type="Node3D"]
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Sprite" type="AnimatedSprite3D" parent="Model"]
+pixel_size = 0.02
+script = ExtResource("1_sprite")
+FramesPath = "res://local_assets/monsters/enemy_basic.spritesheet"

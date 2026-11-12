@@ -5,6 +5,9 @@
 [ext_resource type="Script" path="res://player/CameraFollow.cs" id="3_camera"]
 [ext_resource type="PackedScene" path="res://props/bush.tscn" id="4_bush"]
 [ext_resource type="PackedScene" path="res://enemies/slime.tscn" id="5_slime"]
+[ext_resource type="PackedScene" path="res://enemies/basic_enemy.tscn" id="5_basic_enemy"]
+[ext_resource type="Shader" path="res://core/sprite_hit_flash.gdshader" id="12_sprite_flash"]
+[ext_resource type="Shader" path="res://enemies/corpse_fade.gdshader" id="12_corpse_fade"]
 [ext_resource type="Script" path="res://enemies/EnemyManager.cs" id="6_enemies"]
 [ext_resource type="Script" path="res://player/FacingDebug.cs" id="8_facing"]
 [ext_resource type="Script" path="res://weapons/projectiles/ProjectileManager.cs" id="9_projectiles"]
@@ -113,8 +116,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
 
 [node name="EnemyManager" type="Node3D" parent="." node_paths=PackedStringArray("Target", "XpManager")]
 script = ExtResource("6_enemies")
-EnemyScene = ExtResource("5_slime")
+EnemyScene = ExtResource("5_basic_enemy")
+FallbackScene = ExtResource("5_slime")
 HitFlashMaterial = ExtResource("12_flash")
+SpriteHitFlashShader = ExtResource("12_sprite_flash")
+CorpseFadeShader = ExtResource("12_corpse_fade")
 SpawnDistance = 22.0
 DespawnDistance = 32.0
 Target = NodePath("../Player")

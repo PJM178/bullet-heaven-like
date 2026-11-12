@@ -17,8 +17,17 @@ namespace BulletHeavenLike;
 /// </summary>
 public partial class EnemyManager : Node3D
 {
-    // The scene to instance for each enemy (enemies/slime.tscn).
+    // The scene to instance for each enemy. Two kinds work:
+    // - a 3D model with an AnimationPlayer at "Model/AnimationPlayer"
+    //   playing a "move" clip (enemies/slime.tscn), or
+    // - an 8-direction sprite: a DirectionalSprite3D at "Model/Sprite"
+    //   playing "walk" (enemies/basic_enemy.tscn).
     [Export] public PackedScene EnemyScene;
+
+    // Used instead of EnemyScene when EnemyScene is a sprite enemy whose
+    // frames aren't there (local_assets/ is git-ignored, so a fresh clone
+    // has none). Keeps the game playable without them.
+    [Export] public PackedScene FallbackScene;
 
     // The node enemies chase.
     [Export] public Node3D Target;
@@ -86,7 +95,39 @@ public partial class EnemyManager : Node3D
     // enemy; leave it empty to turn the flash off.
     [Export] public Material HitFlashMaterial;
 
+    // The flash for sprite enemies (core/sprite_hit_flash.gdshader). The
+    // mesh flash above would draw a sprite as a solid white rectangle, so
+    // sprites get their own material, built in _Ready.
+    [Export] public Shader SpriteHitFlashShader;
+
+    // Sprite enemies play their death animation on a separate, small pool
+    // of "corpse" sprites. The killed enemy's own slot is handed to a new
+    // enemy right away, so it can't stay behind to play it. If more enemies
+    // die at once than there are corpses, the oldest corpse is reused early.
+    [Export] public int MaxCorpses = 64;
+
+    // How long the last frame of the death animation (the body on the
+    // ground) stays before the corpse disappears, in seconds.
+    [Export] public float CorpseLinger = 0.4f;
+
+    // After lingering, the corpse dithers away over this many seconds
+    // (enemies/corpse_fade.gdshader). Without the shader it just vanishes.
+    [Export] public float CorpseFadeTime = 0.4f;
+    [Export] public Shader CorpseFadeShader;
+
     private static readonly StringName MoveAnimation = "move";
+
+    // A sprite enemy's walk animation ("walk" -> "walk_SW" etc., see
+    // DirectionalSprite3D). A const string allocates nothing per call.
+    private const string WalkAnimation = "walk";
+    private const string DieAnimation = "die";
+
+    // Whichever of the two flash materials fits the enemy scene in use.
+    private Material _flashMaterial;
+
+    // The camera, which decides which of a sprite's 8 directions shows.
+    // Looked up when first needed (see MoveEnemies).
+    private Camera3D _camera;
 
     // ---- Enemy data. Index i in every array is the same enemy. Only the
     // first _count entries are alive; the rest are spare pool slots. ------
@@ -96,7 +137,10 @@ public partial class EnemyManager : Node3D
     private bool[] _dead;                   // killed, removed next step
     private float[] _flashTime;             // seconds of hit flash left
     private Node3D[] _nodes;
+    // One of these two is set per enemy, depending on the kind of scene;
+    // the other stays null.
     private AnimationPlayer[] _animationPlayers;
+    private DirectionalSprite3D[] _sprites;
     // Every mesh node in each enemy, so the flash can be set on all of
     // them. "GeometryInstance3D[][]" is an array of arrays: one small
     // array per enemy, because a model can be made of several meshes
@@ -126,6 +170,13 @@ public partial class EnemyManager : Node3D
     private int _nextId;
 
     private double _animationTimeAccumulated;
+
+    // ---- Corpses (see MaxCorpses). Empty arrays when the enemies have no
+    // death animation, so nothing below needs a null check. ---------------
+    private Node3D[] _corpses = Array.Empty<Node3D>();
+    private DirectionalSprite3D[] _corpseSprites = Array.Empty<DirectionalSprite3D>();
+    private float[] _corpseTime = Array.Empty<float>(); // seconds left; 0 = free
+    private int _nextCorpse;                             // next one to use, wraps around
 
     // How many enemies are alive (read by the HUD).
     public int Count => _count;
@@ -163,6 +214,7 @@ public partial class EnemyManager : Node3D
         _flashTime = new float[MaxEnemies];
         _nodes = new Node3D[MaxEnemies];
         _animationPlayers = new AnimationPlayer[MaxEnemies];
+        _sprites = new DirectionalSprite3D[MaxEnemies];
         _meshes = new GeometryInstance3D[MaxEnemies][];
         _enemySlot = new int[MaxEnemies];
         _ids = new int[MaxEnemies];
@@ -170,23 +222,200 @@ public partial class EnemyManager : Node3D
         _cellStart = new int[GridTableSize];
         _cellCount = new int[GridTableSize];
 
+        PackedScene scene = ChooseEnemyScene();
+        _flashMaterial = HitFlashMaterial;
+
         // Build the whole pool up front, hidden.
         for (int i = 0; i < MaxEnemies; i++)
         {
             // Instantiate<T> creates a copy of the scene and casts its root.
-            Node3D node = EnemyScene.Instantiate<Node3D>();
+            Node3D node = scene.Instantiate<Node3D>();
             node.Visible = false;
+            // Adding it runs its _Ready, which is when a DirectionalSprite3D
+            // loads its frames, so look at the children after this.
             AddChild(node);
 
-            AnimationPlayer animationPlayer = node.GetNode<AnimationPlayer>("Model/AnimationPlayer");
-            // Manual: the player only moves when we call Advance(), which
-            // lets us step all enemies together at AnimationFps.
-            animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+            AnimationPlayer animationPlayer = node.GetNodeOrNull<AnimationPlayer>("Model/AnimationPlayer");
+            if (animationPlayer != null)
+            {
+                // Manual: the player only moves when we call Advance(), which
+                // lets us step all enemies together at AnimationFps.
+                animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+            }
+
+            DirectionalSprite3D sprite = node.GetNodeOrNull<DirectionalSprite3D>("Model/Sprite");
+            if (sprite != null && i == 0)
+            {
+                // Every enemy is the same scene, so one flash material made
+                // from the first one serves them all.
+                _flashMaterial = MakeSpriteMaterial(SpriteHitFlashShader, sprite);
+            }
 
             _nodes[i] = node;
             _animationPlayers[i] = animationPlayer;
+            _sprites[i] = sprite;
             _meshes[i] = FindMeshes(node);
         }
+
+        BuildCorpses(scene);
+    }
+
+    /// <summary>
+    /// Makes the corpse pool, if the enemies are sprites with a death
+    /// animation. Corpses are ordinary copies of the enemy scene that only
+    /// ever play "die".
+    /// </summary>
+    private void BuildCorpses(PackedScene scene)
+    {
+        DirectionalSprite3D sprite = _sprites[0];
+        if (MaxCorpses <= 0 || sprite == null || sprite.SpriteFrames == null)
+        {
+            return;
+        }
+        // The sprite's animations are named per direction, e.g. "die_S".
+        if (!sprite.SpriteFrames.HasAnimation(SpriteDirections.AnimationName(DieAnimation, 0)))
+        {
+            return;
+        }
+
+        _corpses = new Node3D[MaxCorpses];
+        _corpseSprites = new DirectionalSprite3D[MaxCorpses];
+        _corpseTime = new float[MaxCorpses];
+        // One material for every corpse; each one's fade amount travels in
+        // its own Modulate alpha (see corpse_fade.gdshader).
+        Material fadeMaterial = MakeSpriteMaterial(CorpseFadeShader, sprite);
+        for (int c = 0; c < MaxCorpses; c++)
+        {
+            Node3D node = scene.Instantiate<Node3D>();
+            node.Visible = false;
+            AddChild(node);
+            _corpses[c] = node;
+            _corpseSprites[c] = node.GetNode<DirectionalSprite3D>("Model/Sprite");
+            _corpseSprites[c].MaterialOverride = fadeMaterial;
+        }
+    }
+
+    /// <summary>
+    /// Puts a corpse where enemy i is standing and starts its death
+    /// animation, facing the same way the enemy did.
+    /// </summary>
+    private void StartCorpse(int i)
+    {
+        Camera3D camera = GetCamera();
+        if (_corpses.Length == 0 || camera == null)
+        {
+            return;
+        }
+
+        int c = _nextCorpse;
+        // "%" (remainder) wraps the index back to 0 after the last corpse.
+        _nextCorpse = (_nextCorpse + 1) % _corpses.Length;
+
+        Node3D node = _corpses[c];
+        DirectionalSprite3D sprite = _corpseSprites[c];
+        node.Transform = _nodes[i].Transform;
+        node.Visible = true;
+        // Fully there again (a reused corpse may have been mid-fade).
+        sprite.Modulate = Colors.White;
+
+        // PlayFacing skips the call when this corpse last played "die" in
+        // the same direction, and that run has already finished. So rewind
+        // to the first frame and start it explicitly. Play() with no name
+        // plays the current animation.
+        sprite.PlayFacing(DieAnimation, Target.GlobalPosition - _positions[i], camera);
+        sprite.Frame = 0;
+        sprite.Play();
+
+        // How long the animation runs: frames / (frames per second). The
+        // importer gives every frame of an animation the same length.
+        SpriteFrames frames = sprite.SpriteFrames;
+        StringName animation = sprite.Animation;
+        double fps = Math.Max(frames.GetAnimationSpeed(animation), 1.0);
+        float length = (float)(frames.GetFrameCount(animation) / fps);
+        _corpseTime[c] = length + CorpseLinger + CorpseFadeTime;
+    }
+
+    /// <summary>
+    /// Counts down every corpse, dithers it away during its last
+    /// CorpseFadeTime seconds, and hides it when its time is up.
+    /// </summary>
+    private void UpdateCorpses(float delta)
+    {
+        for (int c = 0; c < _corpseTime.Length; c++)
+        {
+            if (_corpseTime[c] <= 0.0f)
+            {
+                continue;
+            }
+
+            _corpseTime[c] -= delta;
+            if (_corpseTime[c] <= 0.0f)
+            {
+                _corpseTime[c] = 0.0f;
+                _corpses[c].Visible = false;
+            }
+            else if (_corpseTime[c] < CorpseFadeTime)
+            {
+                // Time left as a fraction of the fade: 1 at its start,
+                // falling to 0. Color is a struct (a plain value, like
+                // Vector3), so "new Color" here allocates nothing.
+                float visible = _corpseTime[c] / CorpseFadeTime;
+                _corpseSprites[c].Modulate = new Color(1.0f, 1.0f, 1.0f, visible);
+            }
+        }
+    }
+
+    /// <summary>
+    /// EnemyScene, unless it's a sprite enemy whose frames are missing; then
+    /// FallbackScene. Instances one test enemy to find out, which is the
+    /// simplest way to see exactly what the scene's sprite would load.
+    /// </summary>
+    private PackedScene ChooseEnemyScene()
+    {
+        if (FallbackScene == null)
+        {
+            return EnemyScene;
+        }
+
+        Node3D test = EnemyScene.Instantiate<Node3D>();
+        AddChild(test); // runs DirectionalSprite3D._Ready, which loads the frames
+        DirectionalSprite3D sprite = test.GetNodeOrNull<DirectionalSprite3D>("Model/Sprite");
+        bool missingFrames = sprite != null && sprite.SpriteFrames == null;
+        RemoveChild(test);
+        // Free() deletes the node right away. (QueueFree() would wait until
+        // the end of the frame; either is fine for a one-off in _Ready.)
+        test.Free();
+
+        return missingFrames ? FallbackScene : EnemyScene;
+    }
+
+    /// <summary>
+    /// Builds a material from one of the sprite shaders (hit flash, corpse
+    /// fade) for a sprite enemy. Sprite frames are AtlasTextures: small
+    /// windows into one big texture (the atlas). The shaders sample that
+    /// atlas, set here as "sheet", with the sprite's own UVs.
+    /// Returns null when there's no shader, so the effect is just off.
+    /// </summary>
+    private static Material MakeSpriteMaterial(Shader shader, DirectionalSprite3D sprite)
+    {
+        SpriteFrames frames = sprite.SpriteFrames;
+        if (shader == null || frames == null)
+        {
+            return null;
+        }
+
+        // "as" casts if it can and gives null if not (instead of throwing).
+        string firstAnimation = frames.GetAnimationNames()[0];
+        AtlasTexture frame = frames.GetFrameTexture(firstAnimation, 0) as AtlasTexture;
+        if (frame == null)
+        {
+            return null;
+        }
+
+        ShaderMaterial material = new ShaderMaterial();
+        material.Shader = shader;
+        material.SetShaderParameter("sheet", frame.Atlas);
+        return material;
     }
 
     /// <summary>
@@ -237,6 +466,7 @@ public partial class EnemyManager : Node3D
         // Visual-only updates live in _Process (every rendered frame)
         // rather than _PhysicsProcess, so they look smooth at any frame rate.
         UpdateHitFlash((float)delta);
+        UpdateCorpses((float)delta);
         AdvanceAnimations(delta);
     }
 
@@ -275,7 +505,7 @@ public partial class EnemyManager : Node3D
     /// </summary>
     private void SetHitFlash(int i, bool on)
     {
-        Material material = on ? HitFlashMaterial : null;
+        Material material = on ? _flashMaterial : null;
         GeometryInstance3D[] meshes = _meshes[i];
         for (int m = 0; m < meshes.Length; m++)
         {
@@ -287,6 +517,13 @@ public partial class EnemyManager : Node3D
     {
         // Same stepped animation idea as Player._Process, but one clock
         // drives every enemy, so they all update on the same beat.
+        // Sprite enemies animate by themselves: their frames are already
+        // drawn at a low rate, so they look stepped without our help.
+        if (_count == 0 || _animationPlayers[0] == null)
+        {
+            return;
+        }
+
         if (AnimationFps <= 0.0f)
         {
             for (int i = 0; i < _count; i++)
@@ -355,6 +592,19 @@ public partial class EnemyManager : Node3D
 
         // Start each enemy at a random point in its cycle so they don't all
         // hop in perfect unison.
+        DirectionalSprite3D sprite = _sprites[i];
+        if (sprite != null)
+        {
+            Camera3D camera = GetCamera();
+            if (camera != null && sprite.SpriteFrames != null)
+            {
+                sprite.PlayFacing(WalkAnimation, Target.GlobalPosition - _positions[i], camera);
+                int frameCount = sprite.SpriteFrames.GetFrameCount(sprite.Animation);
+                sprite.Frame = Random.Shared.Next(frameCount);
+            }
+            return;
+        }
+
         AnimationPlayer animationPlayer = _animationPlayers[i];
         animationPlayer.Play(MoveAnimation);
         // Random.Shared is .NET's ready-made random generator, so we don't
@@ -548,8 +798,10 @@ public partial class EnemyManager : Node3D
         {
             _dead[i] = true;
             // Hide it now so it vanishes on the frame it was killed, not
-            // one step later. (Death effects will go here too.)
+            // one step later. A corpse takes its place for the death
+            // animation (sprite enemies only; others just vanish).
             _nodes[i].Visible = false;
+            StartCorpse(i);
             Kills++;
 
             // "?." calls Drop only if XpManager is set (not null).
@@ -592,6 +844,7 @@ public partial class EnemyManager : Node3D
         // AnimationPlayer along with the data so every array stays lined up.
         Node3D deadNode = _nodes[i];
         AnimationPlayer deadPlayer = _animationPlayers[i];
+        DirectionalSprite3D deadSprite = _sprites[i];
         GeometryInstance3D[] deadMeshes = _meshes[i];
         float deadFlash = _flashTime[i];
         deadNode.Visible = false;
@@ -603,6 +856,7 @@ public partial class EnemyManager : Node3D
         _flashTime[i] = _flashTime[last];
         _nodes[i] = _nodes[last];
         _animationPlayers[i] = _animationPlayers[last];
+        _sprites[i] = _sprites[last];
         _meshes[i] = _meshes[last];
 
         // The flash belongs to the node, so it travels with it: the dead
@@ -610,6 +864,7 @@ public partial class EnemyManager : Node3D
         _flashTime[last] = deadFlash;
         _nodes[last] = deadNode;
         _animationPlayers[last] = deadPlayer;
+        _sprites[last] = deadSprite;
         _meshes[last] = deadMeshes;
         _count--;
     }
@@ -714,6 +969,7 @@ public partial class EnemyManager : Node3D
     private void MoveEnemies(float delta)
     {
         Vector3 targetPosition = Target.GlobalPosition;
+        Camera3D camera = GetCamera();
         float despawnSquared = DespawnDistance * DespawnDistance;
         bool touching = false;
 
@@ -750,6 +1006,18 @@ public partial class EnemyManager : Node3D
             // setting it once is one call into the engine instead of two.
             float yaw = Mathf.Atan2(velocity.X, velocity.Z);
             _nodes[i].Transform = new Transform3D(new Basis(Vector3.Up, yaw), position);
+
+            // A sprite is a billboard, so turning the node doesn't show; it
+            // picks which drawn direction to show instead. It faces the
+            // player rather than its exact velocity, because the crowd's
+            // pushing makes velocity jitter, and the sprite would flicker
+            // between directions. PlayFacing does nothing if neither the
+            // animation nor the direction changed, so this is cheap.
+            DirectionalSprite3D sprite = _sprites[i];
+            if (sprite != null && camera != null)
+            {
+                sprite.PlayFacing(WalkAnimation, toTarget, camera);
+            }
         }
 
         // One touch is enough to cost a heart. TakeDamage ignores it while
@@ -759,6 +1027,18 @@ public partial class EnemyManager : Node3D
         {
             _targetStats.TakeDamage(ContactDamage);
         }
+    }
+
+    /// <summary>
+    /// The active 3D camera, looked up once. Not in _Ready, because the
+    /// camera may not have become the current one yet when this node is
+    /// ready. Returns null if there's no camera.
+    /// </summary>
+    private Camera3D GetCamera()
+    {
+        // "??=" assigns only if the left side is still null.
+        _camera ??= GetViewport().GetCamera3D();
+        return _camera;
     }
 
     private Vector3 RandomPointOnSpawnRing()
