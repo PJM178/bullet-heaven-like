@@ -744,6 +744,68 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
+    /// Finds the live enemies closest to point (on the ground) within
+    /// maxRange, up to results.Length of them, and writes their indices into
+    /// results nearest first. Returns how many it found. Like the other
+    /// queries, the caller reuses its own results array, so nothing is
+    /// allocated.
+    ///
+    /// It keeps a small sorted list while looping over every enemy: a new
+    /// enemy that beats the furthest one kept is slid into its place. Cheap
+    /// for a handful of results (a weapon's projectile count).
+    /// </summary>
+    public int FindClosest(Vector3 point, float maxRange, int[] results)
+    {
+        int found = 0;
+        float maxSquared = maxRange * maxRange;
+        // Squared distance of each enemy in results, in the same order.
+        // stackalloc puts a small array on the stack instead of the heap,
+        // so it's free to make and needs no garbage collection. Span<T> is
+        // the array-like view of it.
+        Span<float> distances = stackalloc float[Mathf.Min(results.Length, 64)];
+        int capacity = distances.Length;
+        if (capacity == 0)
+        {
+            return 0;
+        }
+
+        for (int i = 0; i < _count; i++)
+        {
+            if (_dead[i])
+            {
+                continue;
+            }
+
+            float offsetX = _positions[i].X - point.X;
+            float offsetZ = _positions[i].Z - point.Z;
+            float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
+            if (distanceSquared >= maxSquared)
+            {
+                continue;
+            }
+            // List full and this one is no closer than the furthest kept.
+            if (found == capacity && distanceSquared >= distances[found - 1])
+            {
+                continue;
+            }
+
+            // Shift the further ones down one slot (dropping the last when
+            // full) until the new enemy's place is reached.
+            int slot = found < capacity ? found++ : found - 1;
+            while (slot > 0 && distances[slot - 1] > distanceSquared)
+            {
+                distances[slot] = distances[slot - 1];
+                results[slot] = results[slot - 1];
+                slot--;
+            }
+            distances[slot] = distanceSquared;
+            results[slot] = i;
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Returns the index of a live enemy overlapping the circle at point with
     /// the given radius (measured on the ground, height is ignored), or -1
     /// if there is none. Only valid during the current physics step:

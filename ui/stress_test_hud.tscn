@@ -48,3 +48,11 @@ layout_mode = 2
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
 text = "Die"
+
+[node name="LevelUpButton" type="Button" parent="Margin/Rows/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 80)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+text = "Lv+"

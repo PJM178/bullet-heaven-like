@@ -13,6 +13,11 @@ public enum TargetMode
     // The closest living enemy within the weapon's target range. With
     // nobody in range the weapon falls back to Facing.
     ClosestEnemy,
+    // For weapons that fire several things at once: the first goes at the
+    // closest enemy, the second at the next closest, and so on (see
+    // EnemyManager.FindClosest with a results array). A weapon that fires
+    // one thing treats it like ClosestEnemy.
+    ClosestEnemies,
 }
 
 /// <summary>
@@ -45,7 +50,9 @@ public static class WeaponTargeting
         // default.
         switch (mode)
         {
+            // Two "case" labels can share one branch.
             case TargetMode.ClosestEnemy:
+            case TargetMode.ClosestEnemies:
                 int enemy = enemies.FindClosest(origin, range);
                 if (enemy < 0)
                 {

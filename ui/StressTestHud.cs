@@ -36,6 +36,22 @@ public partial class StressTestHud : CanvasLayer
         GetNode<Button>("%MoreButton").Pressed += () => ChangeTarget(Step);
         // Lose every heart at once, to test the death sequence.
         GetNode<Button>("%DieButton").Pressed += () => Player?.Stats.Kill();
+        GetNode<Button>("%LevelUpButton").Pressed += LevelUp;
+    }
+
+    /// <summary>
+    /// Gives exactly the XP still missing for the next level, so the level-up
+    /// goes through the normal path (LeveledUp signal, skill cards). Does
+    /// nothing at max level, where ExperienceToNextLevel is 0.
+    /// </summary>
+    private void LevelUp()
+    {
+        if (Player == null || Player.Stats.IsMaxLevel)
+        {
+            return;
+        }
+        PlayerStats stats = Player.Stats;
+        stats.AddExperience(stats.ExperienceToNextLevel - stats.ExperienceIntoLevel);
     }
 
     private void ChangeTarget(int amount)

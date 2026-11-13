@@ -23,10 +23,11 @@ namespace BulletHeavenLike;
 /// </summary>
 public partial class PlayerStats : Node
 {
-    // XP needed for each level-up, in order (see the class comment). Add
-    // entries here or in the Inspector to add levels. An exported int[]
-    // shows up in the Inspector as an editable list.
-    [Export] public int[] XpPerLevel = { 1000 };
+    // XP needed for each level-up, in order (see the class comment). Four
+    // entries = max level 5, so four skill picks. Add entries here or in the
+    // Inspector to add levels. An exported int[] shows up in the Inspector
+    // as an editable list.
+    [Export] public int[] XpPerLevel = { 1000, 1500, 2200, 3000 };
 
     // A Godot signal, emitted once for each level gained. The
     // "[Signal] delegate ...EventHandler" pattern is how C# declares one;
