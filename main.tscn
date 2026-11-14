@@ -4,8 +4,6 @@
 [ext_resource type="Script" uid="uid://cnrtic5udeyxh" path="res://addons/sprite_kit/DirectionalSprite3D.cs" id="2_sprite"]
 [ext_resource type="Script" path="res://player/CameraFollow.cs" id="3_camera"]
 [ext_resource type="PackedScene" path="res://props/bush.tscn" id="4_bush"]
-[ext_resource type="PackedScene" path="res://enemies/slime.tscn" id="5_slime"]
-[ext_resource type="PackedScene" path="res://enemies/basic_enemy.tscn" id="5_basic_enemy"]
 [ext_resource type="Shader" path="res://core/sprite_hit_flash.gdshader" id="12_sprite_flash"]
 [ext_resource type="Shader" path="res://enemies/corpse_fade.gdshader" id="12_corpse_fade"]
 [ext_resource type="Script" path="res://enemies/EnemyManager.cs" id="6_enemies"]
@@ -42,6 +40,8 @@
 [ext_resource type="Resource" path="res://world_markers/kinds/shrine.tres" id="42_marker_shrine"]
 [ext_resource type="Resource" path="res://world_markers/kinds/ruins.tres" id="43_marker_ruins"]
 [ext_resource type="Resource" path="res://world_markers/kinds/ambush.tres" id="44_marker_ambush"]
+[ext_resource type="Script" path="res://core/WorldObstacles.cs" id="45_world_obstacles"]
+[ext_resource type="Resource" path="res://enemies/kinds/basic_enemy.tres" id="46_basic_enemy_kind"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -161,10 +161,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0, 1.5)
 script = ExtResource("28_placed")
 Definition = ExtResource("33_coin_pouch")
 
-[node name="EnemyManager" type="Node3D" parent="." node_paths=PackedStringArray("Target", "XpManager")]
+[node name="EnemyManager" type="Node3D" parent="." node_paths=PackedStringArray("Target", "XpManager", "Obstacles")]
 script = ExtResource("6_enemies")
-EnemyScene = ExtResource("5_basic_enemy")
-FallbackScene = ExtResource("5_slime")
+Kinds = Array[Resource]([ExtResource("46_basic_enemy_kind")])
 HitFlashMaterial = ExtResource("12_flash")
 SpriteHitFlashShader = ExtResource("12_sprite_flash")
 CorpseFadeShader = ExtResource("12_corpse_fade")
@@ -172,6 +171,10 @@ SpawnDistance = 22.0
 DespawnDistance = 32.0
 Target = NodePath("../Player")
 XpManager = NodePath("../XpManager")
+Obstacles = NodePath("../WorldObstacles")
+
+[node name="WorldObstacles" type="Node" parent="."]
+script = ExtResource("45_world_obstacles")
 
 [node name="XpManager" type="Node3D" parent="." node_paths=PackedStringArray("Player")]
 script = ExtResource("13_xp")
@@ -182,15 +185,17 @@ OrbMaterial = ExtResource("14_orb")
 script = ExtResource("27_pickups")
 Player = NodePath("../Player")
 
-[node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager", "BreakableManager")]
+[node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager", "BreakableManager", "Obstacles")]
 script = ExtResource("9_projectiles")
 EnemyManager = NodePath("../EnemyManager")
 BreakableManager = NodePath("../BreakableManager")
+Obstacles = NodePath("../WorldObstacles")
 
-[node name="BreakableManager" type="Node3D" parent="." node_paths=PackedStringArray("PickupManager", "WorldMarkers")]
+[node name="BreakableManager" type="Node3D" parent="." node_paths=PackedStringArray("PickupManager", "WorldMarkers", "Obstacles")]
 script = ExtResource("34_breakables")
 PickupManager = NodePath("../PickupManager")
 WorldMarkers = NodePath("../WorldMarkers")
+Obstacles = NodePath("../WorldObstacles")
 HitFlashMaterial = ExtResource("12_flash")
 
 [node name="WorldMarkers" type="Node" parent="." node_paths=PackedStringArray("Player", "Camera")]
@@ -201,7 +206,7 @@ Camera = NodePath("../Camera3D")
 [node name="Markers" type="Node3D" parent="."]
 
 [node name="Shrine" type="Node3D" parent="Markers"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -35)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -30)
 script = ExtResource("41_placed_marker")
 Definition = ExtResource("42_marker_shrine")
 
@@ -214,6 +219,13 @@ Definition = ExtResource("43_marker_ruins")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -38, 0, 25)
 script = ExtResource("41_placed_marker")
 Definition = ExtResource("44_marker_ambush")
+
+[node name="House" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -35)
+
+[node name="Building" type="Node" parent="House"]
+script = ExtResource("90_optional")
+ScenePath = "res://local_assets/buildings/house_small.tscn"
 
 [node name="FarBarrel" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 14)

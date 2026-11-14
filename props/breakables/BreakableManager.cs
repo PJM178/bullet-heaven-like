@@ -39,6 +39,9 @@ public partial class BreakableManager : Node3D
     // break. Optional: without it no prop is marked.
     [Export] public WorldMarkers WorldMarkers;
 
+    // Props block enemies too, until they break. Optional.
+    [Export] public WorldObstacles Obstacles;
+
     // Swapped onto a prop's meshes for a moment when it's hit (the same
     // white flash enemies get).
     [Export] public Material HitFlashMaterial;
@@ -90,6 +93,7 @@ public partial class BreakableManager : Node3D
     // it's added, never in the frame loop.
     private List<MeshInstance3D>[] _meshes;
     private int[] _markerIds;     // WorldMarkers id, or -1 for none
+    private int[] _obstacleIds;   // WorldObstacles id, or -1 for none
     private int _count;
 
     // ---- Flying pieces: the first _pieceCount are in the air. -----------
@@ -127,6 +131,7 @@ public partial class BreakableManager : Node3D
         _shapes = new CollisionShape3D[MaxBreakables];
         _meshes = new List<MeshInstance3D>[MaxBreakables];
         _markerIds = new int[MaxBreakables];
+        _obstacleIds = new int[MaxBreakables];
 
         _pieceNodes = new MeshInstance3D[MaxPieces];
         _piecePositions = new Vector3[MaxPieces];
@@ -197,6 +202,13 @@ public partial class BreakableManager : Node3D
         body.AddChild(shape);
         root.AddChild(body);
         _shapes[i] = shape;
+
+        // The same cylinder, for enemies. Scale it like the body.
+        Vector3 scale = transform.Basis.Scale;
+        _obstacleIds[i] = Obstacles != null
+            ? Obstacles.AddCircle(transform.Origin, definition.Radius * Mathf.Max(scale.X, scale.Z),
+                blocksAttacks: false) // a named argument: says which parameter the value is for
+            : -1;
     }
 
     // ---- Hits. Weapons call these next to their enemy hits. --------------
@@ -207,7 +219,7 @@ public partial class BreakableManager : Node3D
     {
         for (int i = 0; i < _count; i++)
         {
-            if (!_broken[i] && GroundDistance(i, centre) <= radius + _definitions[i].Radius)
+            if (!_broken[i] && GroundDistance(i, centre) <= radius + _definitions[i].Radius && CanReach(centre, i))
                 Damage(i, damage);
         }
     }
@@ -225,6 +237,8 @@ public partial class BreakableManager : Node3D
             if (GroundDistance(i, origin) > range + radius)
                 continue;
             if (!InArc(i, origin, forward, halfArc))
+                continue;
+            if (!CanReach(origin, i))
                 continue;
             Damage(i, damage);
         }
@@ -249,6 +263,8 @@ public partial class BreakableManager : Node3D
                 continue;
             if (isArc && !InArc(i, centre, direction, halfAngle))
                 continue;
+            if (!CanReach(centre, i))
+                continue;
             Damage(i, damage);
         }
     }
@@ -271,6 +287,13 @@ public partial class BreakableManager : Node3D
             }
         }
         return false;
+    }
+
+    // No wall between an attack's centre and prop i (projectiles don't
+    // need this: walls stop them before they get here).
+    private bool CanReach(Vector3 from, int i)
+    {
+        return Obstacles == null || !Obstacles.IsLineBlocked(from, _transforms[i].Origin);
     }
 
     private void Damage(int i, float amount)
@@ -303,6 +326,8 @@ public partial class BreakableManager : Node3D
         // changing collision shapes; SetDeferred does it at the end of the
         // frame.
         _shapes[i].SetDeferred(CollisionShape3D.PropertyName.Disabled, true);
+        Obstacles?.Remove(_obstacleIds[i]);
+        _obstacleIds[i] = -1;
 
         BreakableDefinition definition = _definitions[i];
         Transform3D transform = _transforms[i];

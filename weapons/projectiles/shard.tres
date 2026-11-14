@@ -16,7 +16,7 @@ rings = 2
 [resource]
 script = ExtResource("1_def")
 Speed = 14.0
-Lifetime = 0.8
+Range = 11.0
 Damage = 1.0
 Radius = 0.15
 Mesh = SubResource("SphereMesh_shard")

@@ -310,7 +310,8 @@ public partial class HammerWeapon : Node3D
         else
         {
             forward = Player.Forward;
-            cast.Target = Player.GlobalPosition + forward * SmashDistance;
+            // Short of any wall in the way (see WeaponTargeting.SpotAhead).
+            cast.Target = WeaponTargeting.SpotAhead(Player, EnemyManager, forward, SmashDistance);
         }
         cast.Active = true;
         cast.Impacted = false;
@@ -345,6 +346,8 @@ public partial class HammerWeapon : Node3D
         int count = EnemyManager.QueryCircle(cast.Target, SmashDiameter * 0.5f, _targets);
         for (int n = 0; n < count; n++)
         {
+            // QueryCircle already left out enemies behind a wall from
+            // where it lands.
             EnemyManager.Damage(_targets[n], Damage);
         }
         BreakableManager?.DamageCircle(cast.Target, SmashDiameter * 0.5f, Damage);

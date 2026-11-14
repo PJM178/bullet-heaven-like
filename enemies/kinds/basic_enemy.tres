@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="EnemyDefinition" format=3]
+
+[ext_resource type="Script" path="res://enemies/EnemyDefinition.cs" id="1_def"]
+[ext_resource type="PackedScene" path="res://enemies/basic_enemy.tscn" id="2_scene"]
+[ext_resource type="PackedScene" path="res://enemies/slime.tscn" id="3_fallback"]
+
+[resource]
+script = ExtResource("1_def")
+DisplayName = "Basic enemy"
+Scene = ExtResource("2_scene")
+FallbackScene = ExtResource("3_fallback")
+Speed = 2.0
+MaxHealth = 2.0
+ContactDamage = 1
+ContactRange = 0.9
+XpPerKill = 100
+HitRadius = 0.25
+BodyRadius = 0.3
+PoolSize = 600
+CorpsePoolSize = 64

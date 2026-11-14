@@ -67,6 +67,25 @@ public static class WeaponTargeting
     }
 
     /// <summary>
+    /// A spot on the ground <paramref name="distance"/> metres from the
+    /// player in <paramref name="direction"/>, for weapons that land
+    /// somewhere ahead when there's no target. Stops short of the first wall
+    /// on the way, so the attack can't land (and hit) on its far side.
+    /// </summary>
+    public static Vector3 SpotAhead(Player player, EnemyManager enemies, Vector3 direction, float distance)
+    {
+        Vector3 origin = player.GlobalPosition;
+        Vector3 spot = origin + direction * distance;
+        if (enemies?.Obstacles == null)
+        {
+            return spot;
+        }
+        // 0.3 m back from the wall: about an enemy's body, so the attack's
+        // centre is clearly on the player's side.
+        return enemies.Obstacles.ClipLine(origin, spot, 0.3f);
+    }
+
+    /// <summary>
     /// The direction a weapon should attack in, flat on the ground, length
     /// 1: toward the target the mode picks, or the player's facing when
     /// there is none.

@@ -27,7 +27,7 @@ slightly smaller and dimmer.
 
 | Marker | Where | Shape | Rumour / sense range | Start |
 | --- | --- | --- | --- | --- |
-| Shrine | (30, -35), 46 m | gold diamond | 60 / 30 m | Hidden (Rumoured at once) |
+| Shrine | (40, -30), 50 m | gold diamond | 60 / 30 m | Hidden (Rumoured at once) |
 | Ruins | (-45, -45), 64 m | blue square | 50 / 25 m | Hidden |
 | Ambush | (-38, 25), 45 m | red circle | none / 30 m | Rumoured |
 | Barrel (both) | start barrel, (16, 14) | brown square | none / 15 m | Hidden |

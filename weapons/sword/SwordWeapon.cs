@@ -142,13 +142,14 @@ public partial class SwordWeapon : Node3D
                 // angle either side of its centre, so widen by that much.
                 // (Math.Min keeps the value valid for Asin when an enemy is
                 // closer than its own radius.)
-                float bodyAngle = Mathf.Asin(Math.Min(1.0f, EnemyManager.EnemyRadius / distance));
+                float bodyAngle = Mathf.Asin(Math.Min(1.0f, EnemyManager.GetHitRadius(enemy) / distance));
                 if (angle > halfArc + bodyAngle)
                 {
                     continue; // outside the wedge
                 }
             }
 
+            // (QueryCircle already left out enemies behind walls.)
             EnemyManager.Damage(enemy, Damage);
         }
 

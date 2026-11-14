@@ -12,38 +12,33 @@ namespace BulletHeavenLike;
 /// way enemies are *drawn* (nodes today, maybe a MultiMesh later) can change
 /// without touching movement or game logic.
 ///
-/// Enemies are pooled: every enemy node is created once in _Ready and reused.
-/// Nothing is created or freed while the game runs.
+/// What each kind of enemy is like comes from its
+/// <see cref="EnemyDefinition"/> (<see cref="Kinds"/>). Every kind has its
+/// own pool of nodes, made once in _Ready and reused: nothing is created or
+/// freed while the game runs.
 /// </summary>
 public partial class EnemyManager : Node3D
 {
-    // The scene to instance for each enemy. Two kinds work:
-    // - a 3D model with an AnimationPlayer at "Model/AnimationPlayer"
-    //   playing a "move" clip (enemies/slime.tscn), or
-    // - an 8-direction sprite: a DirectionalSprite3D at "Model/Sprite"
-    //   playing "walk" (enemies/basic_enemy.tscn).
-    [Export] public PackedScene EnemyScene;
+    /// <summary>The group this manager is in, so weapons added at runtime
+    /// can find it without a NodePath.</summary>
+    public const string Group = "enemy_manager";
 
-    // Used instead of EnemyScene when EnemyScene is a sprite enemy whose
-    // frames aren't there (local_assets/ is git-ignored, so a fresh clone
-    // has none). Keeps the game playable without them.
-    [Export] public PackedScene FallbackScene;
+    // The kinds of enemy that can spawn, and how often each one does
+    // compared to the others (SpawnWeights[k] for Kinds[k]; a missing
+    // weight counts as 1). A wave system can take over choosing later.
+    [Export] public EnemyDefinition[] Kinds = new EnemyDefinition[0];
+    [Export] public float[] SpawnWeights = new float[0];
 
     // The node enemies chase.
     [Export] public Node3D Target;
 
-    // Size of the pool: the most enemies that can ever be alive at once.
-    [Export] public int MaxEnemies = 600;
-
-    // How many enemies we want alive. The manager spawns or removes a few
-    // per frame until it gets there. The stress-test HUD changes this.
+    // How many enemies we want alive, of all kinds together. The manager
+    // spawns or removes a few per frame until it gets there. The
+    // stress-test HUD changes this.
     [Export] public int TargetCount = 50;
 
     // Spawning/removing is spread over frames to avoid one big hitch.
     [Export] public int MaxSpawnsPerFrame = 10;
-
-    // Metres per second.
-    [Export] public float Speed = 2.0f;
 
     // Enemies spawn on a ring this far from the target (off screen), and any
     // that fall further behind than DespawnDistance are moved back onto the
@@ -63,26 +58,14 @@ public partial class EnemyManager : Node3D
     [Export] public float StopDistance = 0.7f;
     [Export] public float ArriveSlowdown = 1.0f;
 
-    // Hit points each enemy starts with. A shard does 1 damage, so the
-    // default slime takes three hits.
-    [Export] public float MaxHealth = 2.0f;
-
-    // Where killed enemies drop their experience, and how much each is
-    // worth. Without an XpManager, kills just drop nothing.
+    // Where killed enemies drop their experience. Without an XpManager,
+    // kills just drop nothing.
     [Export] public XpManager XpManager;
 
-    // Hearts an enemy takes when it touches the player, and how close
-    // (centre to centre, in metres) counts as touching. Enemies stop at
-    // StopDistance, and the crowd jostles them a little further out, so
-    // this needs to be somewhat larger than StopDistance.
-    [Export] public int ContactDamage = 1;
-    [Export] public float ContactRange = 0.9f;
-
-    [Export] public int XpPerKill = 100;
-
-    // How big an enemy counts as for projectile collisions, in metres on
-    // the ground (see HitTest). Roughly the slime's footprint.
-    [Export] public float EnemyRadius = 0.25f;
+    // Walls and props enemies can't walk through. Optional: without it
+    // enemies walk through everything. Each enemy's size against them is
+    // its definition's BodyRadius.
+    [Export] public WorldObstacles Obstacles;
 
     // Stepped, PS1-style animation rate (see Player.AnimationFps).
     [Export] public float AnimationFps = 12.0f;
@@ -101,10 +84,9 @@ public partial class EnemyManager : Node3D
     [Export] public Shader SpriteHitFlashShader;
 
     // Sprite enemies play their death animation on a separate, small pool
-    // of "corpse" sprites. The killed enemy's own slot is handed to a new
-    // enemy right away, so it can't stay behind to play it. If more enemies
-    // die at once than there are corpses, the oldest corpse is reused early.
-    [Export] public int MaxCorpses = 64;
+    // of "corpse" sprites (EnemyDefinition.CorpsePoolSize). The killed
+    // enemy's node goes back to its pool right away, so it can't stay
+    // behind to play it.
 
     // How long the last frame of the death animation (the body on the
     // ground) stays before the corpse disappears, in seconds.
@@ -122,31 +104,68 @@ public partial class EnemyManager : Node3D
     private const string WalkAnimation = "walk";
     private const string DieAnimation = "die";
 
-    // Whichever of the two flash materials fits the enemy scene in use.
-    private Material _flashMaterial;
+    /// <summary>
+    /// One enemy's node and the parts of it we use, found once when the pool
+    /// is built. A class, so moving it between arrays just moves a reference.
+    /// </summary>
+    private sealed class EnemyBody
+    {
+        public Node3D Node;
+        // One of these two is set, depending on the kind of scene; the
+        // other stays null.
+        public AnimationPlayer AnimationPlayer;
+        public DirectionalSprite3D Sprite;
+        // Every mesh node in the enemy, so the flash can be set on all of
+        // them (a model can be made of several meshes).
+        public GeometryInstance3D[] Meshes;
+    }
+
+    /// <summary>
+    /// Everything that belongs to one kind of enemy while the game runs:
+    /// its definition, its idle nodes, its flash material and its corpses.
+    /// </summary>
+    private sealed class Kind
+    {
+        public EnemyDefinition Definition;
+        public PackedScene Scene;      // Scene or FallbackScene, see ChooseScene
+        public float Weight;
+        public Material FlashMaterial; // whichever flash fits the scene
+
+        // Idle nodes, used like a stack: the first FreeCount are free.
+        public EnemyBody[] Free;
+        public int FreeCount;
+
+        // Corpses. Empty arrays when the kind has no death animation, so
+        // nothing below needs a null check.
+        public Node3D[] Corpses = Array.Empty<Node3D>();
+        public DirectionalSprite3D[] CorpseSprites = Array.Empty<DirectionalSprite3D>();
+        public float[] CorpseTime = Array.Empty<float>(); // seconds left; 0 = free
+        public int NextCorpse;                             // next one to use, wraps around
+    }
+
+    private Kind[] _kinds = Array.Empty<Kind>();
+
+    // The largest HitRadius of any kind: how far around a point the hit
+    // queries have to look in the grid.
+    private float _maxHitRadius;
 
     // The camera, which decides which of a sprite's 8 directions shows.
     // Looked up when first needed (see MoveEnemies).
     private Camera3D _camera;
 
-    // ---- Enemy data. Index i in every array is the same enemy. Only the
-    // first _count entries are alive; the rest are spare pool slots. ------
+    // ---- Enemy data. Index i in every array is the same live enemy. Only
+    // the first _count entries are used; idle nodes wait in their kind's
+    // pool. ----------------------------------------------------------------
     private Vector3[] _positions;
     private Vector3[] _separation;          // per-frame push from neighbours
     private float[] _health;
     private bool[] _dead;                   // killed, removed next step
     private float[] _flashTime;             // seconds of hit flash left
-    private Node3D[] _nodes;
-    // One of these two is set per enemy, depending on the kind of scene;
-    // the other stays null.
-    private AnimationPlayer[] _animationPlayers;
-    private DirectionalSprite3D[] _sprites;
-    // Every mesh node in each enemy, so the flash can be set on all of
-    // them. "GeometryInstance3D[][]" is an array of arrays: one small
-    // array per enemy, because a model can be made of several meshes
-    // (e.g. a modular character's body, clothes and hair).
-    private GeometryInstance3D[][] _meshes;
+    private int[] _kind;                    // index into _kinds
+    private EnemyBody[] _bodies;
     private int _count;
+    // Room for every pool together.
+    private int _capacity;
 
     // ---- Spatial grid (see BuildGrid). -----------------------------------
     // The ground is divided into square cells. Each frame we sort enemies by
@@ -171,15 +190,11 @@ public partial class EnemyManager : Node3D
 
     private double _animationTimeAccumulated;
 
-    // ---- Corpses (see MaxCorpses). Empty arrays when the enemies have no
-    // death animation, so nothing below needs a null check. ---------------
-    private Node3D[] _corpses = Array.Empty<Node3D>();
-    private DirectionalSprite3D[] _corpseSprites = Array.Empty<DirectionalSprite3D>();
-    private float[] _corpseTime = Array.Empty<float>(); // seconds left; 0 = free
-    private int _nextCorpse;                             // next one to use, wraps around
-
     // How many enemies are alive (read by the HUD).
     public int Count => _count;
+
+    // The most enemies that can be alive at once: all pools together.
+    public int MaxEnemies => _capacity;
 
     // How many enemies have been killed since the game started (read by
     // the HUD). "{ get; private set; }" is an auto-property: anyone can
@@ -190,11 +205,17 @@ public partial class EnemyManager : Node3D
     // no PlayerStats child, in which case enemies just don't hurt it.
     private PlayerStats _targetStats;
 
+    public override void _EnterTree()
+    {
+        // Before any _Ready, so weapons always find us in the group.
+        AddToGroup(Group);
+    }
+
     public override void _Ready()
     {
-        if (EnemyScene == null || Target == null)
+        if (Kinds.Length == 0 || Target == null)
         {
-            GD.PushWarning("EnemyManager needs EnemyScene and Target set.");
+            GD.PushWarning("EnemyManager needs Kinds and Target set.");
             SetPhysicsProcess(false);
             SetProcess(false);
             return;
@@ -205,70 +226,102 @@ public partial class EnemyManager : Node3D
         // safe even if the Player's own _Ready hasn't run yet.
         _targetStats = Target.GetNodeOrNull<PlayerStats>("Stats");
 
-        // Allocate every array once, at full size. "new" in _Ready is fine;
-        // it's doing it every frame that we avoid.
-        _positions = new Vector3[MaxEnemies];
-        _separation = new Vector3[MaxEnemies];
-        _health = new float[MaxEnemies];
-        _dead = new bool[MaxEnemies];
-        _flashTime = new float[MaxEnemies];
-        _nodes = new Node3D[MaxEnemies];
-        _animationPlayers = new AnimationPlayer[MaxEnemies];
-        _sprites = new DirectionalSprite3D[MaxEnemies];
-        _meshes = new GeometryInstance3D[MaxEnemies][];
-        _enemySlot = new int[MaxEnemies];
-        _ids = new int[MaxEnemies];
-        _cellEntries = new int[MaxEnemies];
-        _cellStart = new int[GridTableSize];
-        _cellCount = new int[GridTableSize];
-
-        PackedScene scene = ChooseEnemyScene();
-        _flashMaterial = HitFlashMaterial;
-
-        // Build the whole pool up front, hidden.
-        for (int i = 0; i < MaxEnemies; i++)
+        // Build every kind's pool, hidden. "new" in _Ready is fine; it's
+        // doing it every frame that we avoid.
+        _kinds = new Kind[Kinds.Length];
+        _capacity = 0;
+        for (int k = 0; k < Kinds.Length; k++)
         {
-            // Instantiate<T> creates a copy of the scene and casts its root.
-            Node3D node = scene.Instantiate<Node3D>();
-            node.Visible = false;
-            // Adding it runs its _Ready, which is when a DirectionalSprite3D
-            // loads its frames, so look at the children after this.
-            AddChild(node);
-
-            AnimationPlayer animationPlayer = node.GetNodeOrNull<AnimationPlayer>("Model/AnimationPlayer");
-            if (animationPlayer != null)
-            {
-                // Manual: the player only moves when we call Advance(), which
-                // lets us step all enemies together at AnimationFps.
-                animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
-            }
-
-            DirectionalSprite3D sprite = node.GetNodeOrNull<DirectionalSprite3D>("Model/Sprite");
-            if (sprite != null && i == 0)
-            {
-                // Every enemy is the same scene, so one flash material made
-                // from the first one serves them all.
-                _flashMaterial = MakeSpriteMaterial(SpriteHitFlashShader, sprite);
-            }
-
-            _nodes[i] = node;
-            _animationPlayers[i] = animationPlayer;
-            _sprites[i] = sprite;
-            _meshes[i] = FindMeshes(node);
+            _kinds[k] = BuildKind(Kinds[k], k < SpawnWeights.Length ? SpawnWeights[k] : 1.0f);
+            _capacity += _kinds[k].Free.Length;
+            if (Kinds[k] != null)
+                _maxHitRadius = Mathf.Max(_maxHitRadius, Kinds[k].HitRadius);
         }
 
-        BuildCorpses(scene);
+        // The live-enemy arrays, sized for every pool together.
+        _positions = new Vector3[_capacity];
+        _separation = new Vector3[_capacity];
+        _health = new float[_capacity];
+        _dead = new bool[_capacity];
+        _flashTime = new float[_capacity];
+        _kind = new int[_capacity];
+        _bodies = new EnemyBody[_capacity];
+        _enemySlot = new int[_capacity];
+        _ids = new int[_capacity];
+        _cellEntries = new int[_capacity];
+        _cellStart = new int[GridTableSize];
+        _cellCount = new int[GridTableSize];
     }
 
     /// <summary>
-    /// Makes the corpse pool, if the enemies are sprites with a death
+    /// Makes one kind's node pool and corpses. A kind with no definition or
+    /// scene gets an empty pool and never spawns.
+    /// </summary>
+    private Kind BuildKind(EnemyDefinition definition, float weight)
+    {
+        var kind = new Kind { Definition = definition, Weight = weight, Free = Array.Empty<EnemyBody>() };
+        if (definition == null || definition.Scene == null)
+        {
+            GD.PushWarning($"EnemyManager: a kind has no definition or scene; it won't spawn.");
+            return kind;
+        }
+
+        kind.Scene = ChooseScene(definition);
+        kind.FlashMaterial = HitFlashMaterial;
+        kind.Free = new EnemyBody[Math.Max(definition.PoolSize, 0)];
+        for (int n = 0; n < kind.Free.Length; n++)
+        {
+            EnemyBody body = MakeBody(kind.Scene);
+            if (body.Sprite != null && n == 0)
+            {
+                // Every enemy of a kind is the same scene, so one flash
+                // material made from the first one serves them all.
+                kind.FlashMaterial = MakeSpriteMaterial(SpriteHitFlashShader, body.Sprite);
+            }
+            kind.Free[n] = body;
+        }
+        kind.FreeCount = kind.Free.Length;
+
+        if (kind.Free.Length > 0)
+            BuildCorpses(kind, kind.Free[0].Sprite);
+        return kind;
+    }
+
+    private EnemyBody MakeBody(PackedScene scene)
+    {
+        // Instantiate<T> creates a copy of the scene and casts its root.
+        Node3D node = scene.Instantiate<Node3D>();
+        node.Visible = false;
+        // Adding it runs its _Ready, which is when a DirectionalSprite3D
+        // loads its frames, so look at the children after this.
+        AddChild(node);
+
+        AnimationPlayer animationPlayer = node.GetNodeOrNull<AnimationPlayer>("Model/AnimationPlayer");
+        if (animationPlayer != null)
+        {
+            // Manual: the player only moves when we call Advance(), which
+            // lets us step all enemies together at AnimationFps.
+            animationPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
+        }
+
+        return new EnemyBody
+        {
+            Node = node,
+            AnimationPlayer = animationPlayer,
+            Sprite = node.GetNodeOrNull<DirectionalSprite3D>("Model/Sprite"),
+            Meshes = FindMeshes(node),
+        };
+    }
+
+    /// <summary>
+    /// Makes a kind's corpse pool, if its enemies are sprites with a death
     /// animation. Corpses are ordinary copies of the enemy scene that only
     /// ever play "die".
     /// </summary>
-    private void BuildCorpses(PackedScene scene)
+    private void BuildCorpses(Kind kind, DirectionalSprite3D sprite)
     {
-        DirectionalSprite3D sprite = _sprites[0];
-        if (MaxCorpses <= 0 || sprite == null || sprite.SpriteFrames == null)
+        int size = kind.Definition.CorpsePoolSize;
+        if (size <= 0 || sprite == null || sprite.SpriteFrames == null)
         {
             return;
         }
@@ -278,20 +331,20 @@ public partial class EnemyManager : Node3D
             return;
         }
 
-        _corpses = new Node3D[MaxCorpses];
-        _corpseSprites = new DirectionalSprite3D[MaxCorpses];
-        _corpseTime = new float[MaxCorpses];
-        // One material for every corpse; each one's fade amount travels in
-        // its own Modulate alpha (see corpse_fade.gdshader).
+        kind.Corpses = new Node3D[size];
+        kind.CorpseSprites = new DirectionalSprite3D[size];
+        kind.CorpseTime = new float[size];
+        // One material for every corpse of the kind; each one's fade amount
+        // travels in its own Modulate alpha (see corpse_fade.gdshader).
         Material fadeMaterial = MakeSpriteMaterial(CorpseFadeShader, sprite);
-        for (int c = 0; c < MaxCorpses; c++)
+        for (int c = 0; c < size; c++)
         {
-            Node3D node = scene.Instantiate<Node3D>();
+            Node3D node = kind.Scene.Instantiate<Node3D>();
             node.Visible = false;
             AddChild(node);
-            _corpses[c] = node;
-            _corpseSprites[c] = node.GetNode<DirectionalSprite3D>("Model/Sprite");
-            _corpseSprites[c].MaterialOverride = fadeMaterial;
+            kind.Corpses[c] = node;
+            kind.CorpseSprites[c] = node.GetNode<DirectionalSprite3D>("Model/Sprite");
+            kind.CorpseSprites[c].MaterialOverride = fadeMaterial;
         }
     }
 
@@ -301,19 +354,20 @@ public partial class EnemyManager : Node3D
     /// </summary>
     private void StartCorpse(int i)
     {
+        Kind kind = _kinds[_kind[i]];
         Camera3D camera = GetCamera();
-        if (_corpses.Length == 0 || camera == null)
+        if (kind.Corpses.Length == 0 || camera == null)
         {
             return;
         }
 
-        int c = _nextCorpse;
+        int c = kind.NextCorpse;
         // "%" (remainder) wraps the index back to 0 after the last corpse.
-        _nextCorpse = (_nextCorpse + 1) % _corpses.Length;
+        kind.NextCorpse = (kind.NextCorpse + 1) % kind.Corpses.Length;
 
-        Node3D node = _corpses[c];
-        DirectionalSprite3D sprite = _corpseSprites[c];
-        node.Transform = _nodes[i].Transform;
+        Node3D node = kind.Corpses[c];
+        DirectionalSprite3D sprite = kind.CorpseSprites[c];
+        node.Transform = _bodies[i].Node.Transform;
         node.Visible = true;
         // Fully there again (a reused corpse may have been mid-fade).
         sprite.Modulate = Colors.White;
@@ -332,7 +386,7 @@ public partial class EnemyManager : Node3D
         StringName animation = sprite.Animation;
         double fps = Math.Max(frames.GetAnimationSpeed(animation), 1.0);
         float length = (float)(frames.GetFrameCount(animation) / fps);
-        _corpseTime[c] = length + CorpseLinger + CorpseFadeTime;
+        kind.CorpseTime[c] = length + CorpseLinger + CorpseFadeTime;
     }
 
     /// <summary>
@@ -341,43 +395,48 @@ public partial class EnemyManager : Node3D
     /// </summary>
     private void UpdateCorpses(float delta)
     {
-        for (int c = 0; c < _corpseTime.Length; c++)
+        for (int k = 0; k < _kinds.Length; k++)
         {
-            if (_corpseTime[c] <= 0.0f)
+            Kind kind = _kinds[k];
+            for (int c = 0; c < kind.CorpseTime.Length; c++)
             {
-                continue;
-            }
+                if (kind.CorpseTime[c] <= 0.0f)
+                {
+                    continue;
+                }
 
-            _corpseTime[c] -= delta;
-            if (_corpseTime[c] <= 0.0f)
-            {
-                _corpseTime[c] = 0.0f;
-                _corpses[c].Visible = false;
-            }
-            else if (_corpseTime[c] < CorpseFadeTime)
-            {
-                // Time left as a fraction of the fade: 1 at its start,
-                // falling to 0. Color is a struct (a plain value, like
-                // Vector3), so "new Color" here allocates nothing.
-                float visible = _corpseTime[c] / CorpseFadeTime;
-                _corpseSprites[c].Modulate = new Color(1.0f, 1.0f, 1.0f, visible);
+                kind.CorpseTime[c] -= delta;
+                if (kind.CorpseTime[c] <= 0.0f)
+                {
+                    kind.CorpseTime[c] = 0.0f;
+                    kind.Corpses[c].Visible = false;
+                }
+                else if (kind.CorpseTime[c] < CorpseFadeTime)
+                {
+                    // Time left as a fraction of the fade: 1 at its start,
+                    // falling to 0. Color is a struct (a plain value, like
+                    // Vector3), so "new Color" here allocates nothing.
+                    float visible = kind.CorpseTime[c] / CorpseFadeTime;
+                    kind.CorpseSprites[c].Modulate = new Color(1.0f, 1.0f, 1.0f, visible);
+                }
             }
         }
     }
 
     /// <summary>
-    /// EnemyScene, unless it's a sprite enemy whose frames are missing; then
-    /// FallbackScene. Instances one test enemy to find out, which is the
-    /// simplest way to see exactly what the scene's sprite would load.
+    /// The definition's Scene, unless it's a sprite enemy whose frames are
+    /// missing; then its FallbackScene. Instances one test enemy to find out,
+    /// which is the simplest way to see exactly what the scene's sprite
+    /// would load.
     /// </summary>
-    private PackedScene ChooseEnemyScene()
+    private PackedScene ChooseScene(EnemyDefinition definition)
     {
-        if (FallbackScene == null)
+        if (definition.FallbackScene == null)
         {
-            return EnemyScene;
+            return definition.Scene;
         }
 
-        Node3D test = EnemyScene.Instantiate<Node3D>();
+        Node3D test = definition.Scene.Instantiate<Node3D>();
         AddChild(test); // runs DirectionalSprite3D._Ready, which loads the frames
         DirectionalSprite3D sprite = test.GetNodeOrNull<DirectionalSprite3D>("Model/Sprite");
         bool missingFrames = sprite != null && sprite.SpriteFrames == null;
@@ -386,7 +445,7 @@ public partial class EnemyManager : Node3D
         // the end of the frame; either is fine for a one-off in _Ready.)
         test.Free();
 
-        return missingFrames ? FallbackScene : EnemyScene;
+        return missingFrames ? definition.FallbackScene : definition.Scene;
     }
 
     /// <summary>
@@ -505,8 +564,8 @@ public partial class EnemyManager : Node3D
     /// </summary>
     private void SetHitFlash(int i, bool on)
     {
-        Material material = on ? _flashMaterial : null;
-        GeometryInstance3D[] meshes = _meshes[i];
+        Material material = on ? _kinds[_kind[i]].FlashMaterial : null;
+        GeometryInstance3D[] meshes = _bodies[i].Meshes;
         for (int m = 0; m < meshes.Length; m++)
         {
             meshes[m].MaterialOverride = material;
@@ -518,8 +577,9 @@ public partial class EnemyManager : Node3D
         // Same stepped animation idea as Player._Process, but one clock
         // drives every enemy, so they all update on the same beat.
         // Sprite enemies animate by themselves: their frames are already
-        // drawn at a low rate, so they look stepped without our help.
-        if (_count == 0 || _animationPlayers[0] == null)
+        // drawn at a low rate, so they look stepped without our help, and
+        // have no AnimationPlayer (null) to advance.
+        if (_count == 0)
         {
             return;
         }
@@ -528,7 +588,7 @@ public partial class EnemyManager : Node3D
         {
             for (int i = 0; i < _count; i++)
             {
-                _animationPlayers[i].Advance(delta);
+                _bodies[i].AnimationPlayer?.Advance(delta);
             }
             return;
         }
@@ -545,7 +605,7 @@ public partial class EnemyManager : Node3D
         _animationTimeAccumulated -= advance;
         for (int i = 0; i < _count; i++)
         {
-            _animationPlayers[i].Advance(advance);
+            _bodies[i].AnimationPlayer?.Advance(advance);
         }
     }
 
@@ -559,7 +619,10 @@ public partial class EnemyManager : Node3D
 
         for (int n = 0; n < MaxSpawnsPerFrame && _count < wanted; n++)
         {
-            Spawn();
+            if (!Spawn())
+            {
+                break; // every pool is empty
+            }
         }
         for (int n = 0; n < MaxSpawnsPerFrame && _count > wanted; n++)
         {
@@ -568,31 +631,69 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
-    /// Takes the next free pool slot and places an enemy on the spawn ring.
+    /// Picks a kind by SpawnWeights among those with idle nodes left.
+    /// Returns its index, or -1 when every pool is empty.
     /// </summary>
-    private void Spawn()
+    private int PickKind()
     {
+        float total = 0.0f;
+        for (int k = 0; k < _kinds.Length; k++)
+        {
+            if (_kinds[k].FreeCount > 0)
+                total += Mathf.Max(_kinds[k].Weight, 0.0f);
+        }
+        if (total <= 0.0f)
+            return -1;
+
+        // A random point along the weights laid end to end; the kind whose
+        // stretch it lands in wins.
+        float roll = Random.Shared.NextSingle() * total;
+        int last = -1;
+        for (int k = 0; k < _kinds.Length; k++)
+        {
+            if (_kinds[k].FreeCount == 0 || _kinds[k].Weight <= 0.0f)
+                continue;
+            last = k;
+            roll -= _kinds[k].Weight;
+            if (roll < 0.0f)
+                return k;
+        }
+        return last; // rounding left a sliver at the end
+    }
+
+    /// <summary>
+    /// Takes an idle node of a picked kind and places a new enemy on the
+    /// spawn ring. Returns false when every pool is empty.
+    /// </summary>
+    private bool Spawn()
+    {
+        int k = PickKind();
+        if (k < 0)
+        {
+            return false;
+        }
+        Kind kind = _kinds[k];
+        EnemyDefinition definition = kind.Definition;
+
+        // Pop the top of the kind's stack of idle nodes.
+        kind.FreeCount--;
+        EnemyBody body = kind.Free[kind.FreeCount];
+
         int i = _count;
         _count++;
-
+        _bodies[i] = body;
+        _kind[i] = k;
         _positions[i] = RandomPointOnSpawnRing();
-        // Pool slots are reused, so reset everything a previous enemy in
-        // this slot may have left behind.
-        _health[i] = MaxHealth;
+        _health[i] = definition.MaxHealth;
         _dead[i] = false;
+        _flashTime[i] = 0.0f;
         _ids[i] = _nextId;
         _nextId++;
-        // A previous enemy in this slot may have died mid-flash.
-        if (_flashTime[i] > 0.0f)
-        {
-            _flashTime[i] = 0.0f;
-            SetHitFlash(i, false);
-        }
-        _nodes[i].Visible = true;
+        body.Node.Visible = true;
 
         // Start each enemy at a random point in its cycle so they don't all
         // hop in perfect unison.
-        DirectionalSprite3D sprite = _sprites[i];
+        DirectionalSprite3D sprite = body.Sprite;
         if (sprite != null)
         {
             Camera3D camera = GetCamera();
@@ -602,17 +703,40 @@ public partial class EnemyManager : Node3D
                 int frameCount = sprite.SpriteFrames.GetFrameCount(sprite.Animation);
                 sprite.Frame = Random.Shared.Next(frameCount);
             }
-            return;
+            return true;
         }
 
-        AnimationPlayer animationPlayer = _animationPlayers[i];
-        animationPlayer.Play(MoveAnimation);
-        // Random.Shared is .NET's ready-made random generator, so we don't
-        // need to create (allocate) our own. (We read the length from the
-        // clip itself: in Manual mode, Play() hasn't fully started the
-        // animation yet, so CurrentAnimationLength would still be 0.)
-        double length = animationPlayer.GetAnimation(MoveAnimation).Length;
-        animationPlayer.Seek(Random.Shared.NextDouble() * length, true);
+        AnimationPlayer animationPlayer = body.AnimationPlayer;
+        if (animationPlayer != null)
+        {
+            animationPlayer.Play(MoveAnimation);
+            // Random.Shared is .NET's ready-made random generator, so we
+            // don't need to create (allocate) our own. (We read the length
+            // from the clip itself: in Manual mode, Play() hasn't fully
+            // started the animation yet, so CurrentAnimationLength would
+            // still be 0.)
+            double length = animationPlayer.GetAnimation(MoveAnimation).Length;
+            animationPlayer.Seek(Random.Shared.NextDouble() * length, true);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// How big live enemy i is for hits, in metres on the ground (its
+    /// definition's HitRadius). Only valid during the current physics step.
+    /// </summary>
+    public float GetHitRadius(int i) => _kinds[_kind[i]].Definition.HitRadius;
+
+    /// <summary>
+    /// Whether an attack from <paramref name="from"/> can reach live enemy i:
+    /// no wall (an obstacle that blocks attacks) on the straight line between
+    /// them. The hit queries (QueryCircle, QueryRing, HitTest) and FindClosest
+    /// already apply it; call it directly only for a line they don't cover.
+    /// Always true without Obstacles.
+    /// </summary>
+    public bool CanReach(Vector3 from, int i)
+    {
+        return Obstacles == null || !Obstacles.IsLineBlocked(from, _positions[i]);
     }
 
     /// <summary>
@@ -633,6 +757,10 @@ public partial class EnemyManager : Node3D
     /// radius (on the ground, height ignored) and writes their indices into
     /// results. Returns how many it found, at most results.Length.
     ///
+    /// Enemies behind a wall as seen from point are left out (see CanReach),
+    /// so every area attack built on these queries is stopped by walls
+    /// without having to check itself.
+    ///
     /// The caller owns the results array and reuses it every call, so a
     /// query allocates nothing. Indices are only valid during the current
     /// physics step, so use them right away.
@@ -652,13 +780,8 @@ public partial class EnemyManager : Node3D
     public int QueryRing(Vector3 point, float innerRadius, float outerRadius, int[] results)
     {
         int found = 0;
-        float reach = outerRadius + EnemyRadius;
-        float reachSquared = reach * reach;
-        // Enemies closer than this were already touching the inner circle.
-        // With no hole (innerRadius 0) nothing is excluded.
-        float innerReach = innerRadius > 0.0f ? innerRadius + EnemyRadius : 0.0f;
-        float innerReachSquared = innerReach * innerReach;
-        int cellRange = Mathf.CeilToInt(reach / SeparationRadius);
+        // Look as far out as the biggest enemy could reach in from.
+        int cellRange = Mathf.CeilToInt((outerRadius + _maxHitRadius) / SeparationRadius);
         int cellX = CellCoord(point.X);
         int cellZ = CellCoord(point.Z);
 
@@ -678,10 +801,25 @@ public partial class EnemyManager : Node3D
                         continue;
                     }
 
+                    // Each kind has its own size, so the reach is worked
+                    // out per enemy.
+                    float hitRadius = _kinds[_kind[j]].Definition.HitRadius;
+                    float reach = outerRadius + hitRadius;
+                    // Enemies closer than this were already touching the
+                    // inner circle. With no hole (innerRadius 0) nothing is
+                    // excluded.
+                    float innerReach = innerRadius > 0.0f ? innerRadius + hitRadius : 0.0f;
                     float offsetX = _positions[j].X - point.X;
                     float offsetZ = _positions[j].Z - point.Z;
                     float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-                    if (distanceSquared >= reachSquared || distanceSquared < innerReachSquared)
+                    if (distanceSquared >= reach * reach || distanceSquared < innerReach * innerReach)
+                    {
+                        continue;
+                    }
+
+                    // Behind a wall from the query's centre. Tested after the
+                    // distance, so only enemies actually caught pay for it.
+                    if (!CanReach(point, j))
                     {
                         continue;
                     }
@@ -710,11 +848,13 @@ public partial class EnemyManager : Node3D
 
     /// <summary>
     /// Returns the index of the live enemy closest to point (on the ground,
-    /// height ignored) that is no further than maxRange, or -1 if none is.
-    /// Like every enemy index, only valid during the current physics step.
+    /// height ignored) that is no further than maxRange and can be seen from
+    /// point (no wall in between, see CanReach), or -1 if none is. Like
+    /// every enemy index, only valid during the current physics step.
     ///
     /// A plain loop over every enemy: a few hundred distance checks are
-    /// cheap, and unlike the grid it works at any range.
+    /// cheap, and unlike the grid it works at any range. The wall check is
+    /// dearer, so it only runs for an enemy that would beat the best so far.
     /// </summary>
     public int FindClosest(Vector3 point, float maxRange)
     {
@@ -733,7 +873,7 @@ public partial class EnemyManager : Node3D
             float offsetX = _positions[i].X - point.X;
             float offsetZ = _positions[i].Z - point.Z;
             float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-            if (distanceSquared < bestSquared)
+            if (distanceSquared < bestSquared && CanReach(point, i))
             {
                 bestSquared = distanceSquared;
                 closest = i;
@@ -788,6 +928,11 @@ public partial class EnemyManager : Node3D
             {
                 continue;
             }
+            // Behind a wall: can't be aimed at.
+            if (!CanReach(point, i))
+            {
+                continue;
+            }
 
             // Shift the further ones down one slot (dropping the last when
             // full) until the new enemy's place is reached.
@@ -808,8 +953,9 @@ public partial class EnemyManager : Node3D
     /// <summary>
     /// Returns the index of a live enemy overlapping the circle at point with
     /// the given radius (measured on the ground, height is ignored), or -1
-    /// if there is none. Only valid during the current physics step:
-    /// enemy indices change when enemies are removed.
+    /// if there is none. Enemies behind a wall from point don't count.
+    /// Only valid during the current physics step: enemy indices change
+    /// when enemies are removed.
     /// </summary>
     public int HitTest(Vector3 point, float radius)
     {
@@ -818,15 +964,10 @@ public partial class EnemyManager : Node3D
             return -1;
         }
 
-        // The two circles overlap when their centres are closer than the
-        // two radii added together.
-        float reach = radius + EnemyRadius;
-        float reachSquared = reach * reach;
-
         // How many cells out from the point's cell we have to look. Cells
         // are SeparationRadius wide, so with the default sizes this is 1
-        // (the 3x3 block), but a big projectile would need more.
-        int cellRange = Mathf.CeilToInt(reach / SeparationRadius);
+        // (the 3x3 block), but a big projectile or enemy would need more.
+        int cellRange = Mathf.CeilToInt((radius + _maxHitRadius) / SeparationRadius);
         int cellX = CellCoord(point.X);
         int cellZ = CellCoord(point.Z);
 
@@ -848,9 +989,12 @@ public partial class EnemyManager : Node3D
                         continue;
                     }
 
+                    // The two circles overlap when their centres are closer
+                    // than the two radii added together.
+                    float reach = radius + _kinds[_kind[j]].Definition.HitRadius;
                     float offsetX = _positions[j].X - point.X;
                     float offsetZ = _positions[j].Z - point.Z;
-                    if (offsetX * offsetX + offsetZ * offsetZ < reachSquared)
+                    if (offsetX * offsetX + offsetZ * offsetZ < reach * reach && CanReach(point, j))
                     {
                         return j;
                     }
@@ -897,12 +1041,12 @@ public partial class EnemyManager : Node3D
             // Hide it now so it vanishes on the frame it was killed, not
             // one step later. A corpse takes its place for the death
             // animation (sprite enemies only; others just vanish).
-            _nodes[i].Visible = false;
+            _bodies[i].Node.Visible = false;
             StartCorpse(i);
             Kills++;
 
             // "?." calls Drop only if XpManager is set (not null).
-            XpManager?.Drop(_positions[i], XpPerKill);
+            XpManager?.Drop(_positions[i], _kinds[_kind[i]].Definition.XpPerKill);
         }
     }
 
@@ -925,44 +1069,39 @@ public partial class EnemyManager : Node3D
     }
 
     /// <summary>
-    /// Removes enemy i. The last alive enemy is moved into its slot, so the
-    /// alive enemies always stay packed at the start of the arrays ("swap
-    /// remove"). Fast, but it changes the order: never keep an enemy index
-    /// around across frames.
+    /// Removes enemy i: its node goes back to its kind's pool, and the last
+    /// alive enemy is moved into its slot, so the alive enemies always stay
+    /// packed at the start of the arrays ("swap remove"). Fast, but it
+    /// changes the order: never keep an enemy index around across frames.
     ///
     /// Private, because removing an enemy in the middle of a physics step
     /// would break the grid. Other code kills enemies through Damage.
     /// </summary>
     private void Despawn(int i)
     {
+        // End a flash still going, so the node goes back to the pool with
+        // its normal look.
+        if (_flashTime[i] > 0.0f)
+        {
+            SetHitFlash(i, false);
+        }
+
+        // Hide the node and push it back onto its kind's stack.
+        EnemyBody body = _bodies[i];
+        body.Node.Visible = false;
+        Kind kind = _kinds[_kind[i]];
+        kind.Free[kind.FreeCount] = body;
+        kind.FreeCount++;
+
         int last = _count - 1;
-
-        // The node itself is parked and hidden. We swap the node and its
-        // AnimationPlayer along with the data so every array stays lined up.
-        Node3D deadNode = _nodes[i];
-        AnimationPlayer deadPlayer = _animationPlayers[i];
-        DirectionalSprite3D deadSprite = _sprites[i];
-        GeometryInstance3D[] deadMeshes = _meshes[i];
-        float deadFlash = _flashTime[i];
-        deadNode.Visible = false;
-
         _positions[i] = _positions[last];
         _ids[i] = _ids[last];
         _health[i] = _health[last];
         _dead[i] = _dead[last];
         _flashTime[i] = _flashTime[last];
-        _nodes[i] = _nodes[last];
-        _animationPlayers[i] = _animationPlayers[last];
-        _sprites[i] = _sprites[last];
-        _meshes[i] = _meshes[last];
-
-        // The flash belongs to the node, so it travels with it: the dead
-        // node keeps its flash time in the parked slot and Spawn clears it.
-        _flashTime[last] = deadFlash;
-        _nodes[last] = deadNode;
-        _animationPlayers[last] = deadPlayer;
-        _sprites[last] = deadSprite;
-        _meshes[last] = deadMeshes;
+        _kind[i] = _kind[last];
+        _bodies[i] = _bodies[last];
+        _bodies[last] = null;
         _count--;
     }
 
@@ -1068,10 +1207,12 @@ public partial class EnemyManager : Node3D
         Vector3 targetPosition = Target.GlobalPosition;
         Camera3D camera = GetCamera();
         float despawnSquared = DespawnDistance * DespawnDistance;
-        bool touching = false;
+        // The most hearts any touching enemy would take this step.
+        int contactDamage = 0;
 
         for (int i = 0; i < _count; i++)
         {
+            EnemyDefinition definition = _kinds[_kind[i]].Definition;
             Vector3 position = _positions[i];
             Vector3 toTarget = targetPosition - position;
             toTarget.Y = 0.0f;
@@ -1087,22 +1228,33 @@ public partial class EnemyManager : Node3D
             // 0 at StopDistance, rising to 1 (full speed) ArriveSlowdown
             // metres further out.
             float distance = toTarget.Length();
-            if (distance < ContactRange)
+            // Touching only counts with no wall in between. The wall check
+            // runs only for the few enemies already this close.
+            if (distance < definition.ContactRange
+                && (Obstacles == null || !Obstacles.IsLineBlocked(position, targetPosition)))
             {
-                touching = true;
+                contactDamage = Math.Max(contactDamage, definition.ContactDamage);
             }
             float chase = Mathf.Clamp((distance - StopDistance) / ArriveSlowdown, 0.0f, 1.0f);
 
-            Vector3 velocity = toTarget.Normalized() * (Speed * chase) + _separation[i] * SeparationStrength;
+            Vector3 velocity = toTarget.Normalized() * (definition.Speed * chase) + _separation[i] * SeparationStrength;
             position += velocity * delta;
             position.Y = 0.0f;
+            // Step back out of any wall or prop it just walked into. Doing
+            // it after the move (not by changing the velocity) also frees
+            // enemies that spawned inside something.
+            if (Obstacles != null)
+            {
+                position = Obstacles.PushOut(position, definition.BodyRadius);
+            }
             _positions[i] = position;
 
             // Face the direction of travel (the model's front is +Z, see
             // Player.FaceDirection). Building the whole transform and
             // setting it once is one call into the engine instead of two.
             float yaw = Mathf.Atan2(velocity.X, velocity.Z);
-            _nodes[i].Transform = new Transform3D(new Basis(Vector3.Up, yaw), position);
+            EnemyBody body = _bodies[i];
+            body.Node.Transform = new Transform3D(new Basis(Vector3.Up, yaw), position);
 
             // A sprite is a billboard, so turning the node doesn't show; it
             // picks which drawn direction to show instead. It faces the
@@ -1110,7 +1262,7 @@ public partial class EnemyManager : Node3D
             // pushing makes velocity jitter, and the sprite would flicker
             // between directions. PlayFacing does nothing if neither the
             // animation nor the direction changed, so this is cheap.
-            DirectionalSprite3D sprite = _sprites[i];
+            DirectionalSprite3D sprite = body.Sprite;
             if (sprite != null && camera != null)
             {
                 sprite.PlayFacing(WalkAnimation, toTarget, camera);
@@ -1120,9 +1272,9 @@ public partial class EnemyManager : Node3D
         // One touch is enough to cost a heart. TakeDamage ignores it while
         // the player is still invulnerable from the previous hit, so it is
         // fine to call it every step something is touching.
-        if (touching && _targetStats != null)
+        if (contactDamage > 0 && _targetStats != null)
         {
-            _targetStats.TakeDamage(ContactDamage);
+            _targetStats.TakeDamage(contactDamage);
         }
     }
 

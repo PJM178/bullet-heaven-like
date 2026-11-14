@@ -38,17 +38,21 @@ scenes, models, shaders and materials it belongs to.
 
 ```
 game.tscn, main.tscn   entry scenes (UI shell, and the 3D world)
-core/                  shared by everything (base PS1 shader, hit flash)
+core/                  shared by everything (base PS1 shader, hit flash,
+                       WorldObstacles: walls/props that block movement and attacks)
 player/                Player, camera, player model
-enemies/               EnemyManager, enemy scenes and models
-weapons/<name>/        one folder per weapon (sword/, projectiles/, ...)
+enemies/               EnemyManager, enemy scenes and models;
+                       kinds/ (EnemyDefinition .tres, one per kind of enemy)
+weapons/<name>/        one folder per weapon (sword/, hammer/, ...); projectiles/ is the
+                       shared projectile system (ProjectileManager, ProjectileWeapon)
 skills/                SkillDefinition (resource) and SkillManager (learned
                        skills, random level-up choices); each weapon's
                        <name>_skill.tres lives in its weapon folder
 pickups/               XP orbs and other collectables
 world_markers/         WorldMarkers (points of interest, events) shown on the minimap
 ui/                    layout, joystick, HUD
-props/                 level decoration; breakables/ (BreakableManager, definitions)
+props/                 level decoration; breakables/ (BreakableManager, definitions),
+                       walk_in/ (WalkInSpace: cutaway with wall stubs for enterable spaces)
 art/                   Blender sources and generator scripts (.gdignore'd)
 docs/                  design/ (plans, decisions) and systems/ (as built);
                        .gdignore'd, indexed in docs/README.md
@@ -56,7 +60,10 @@ addons/sprite_kit/     .spritesheet importer -> SpriteFrames, DirectionalSprite3
                        SpriteDirections, KeyframeEffect (.str effect player)
 local_assets/          local sprites/effects/models used in-game (git-ignored, but
                        exported): characters/{players,monsters}/, pickups/,
-                       effects/<name>/ (*.bin), props/<category>/ (.glb)
+                       effects/<name>/ (*.bin), props/<category>/ (.glb),
+                       exteriors/, interiors/ (building blocks),
+                       kit/<style>/ (modular walk-in building pieces),
+                       buildings/<name>.tscn (assembled from the blocks)
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several

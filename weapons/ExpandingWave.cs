@@ -132,7 +132,7 @@ public sealed class ExpandingWave
             {
                 continue; // hit on an earlier step
             }
-            if (_isArc && !InArc(_enemies.GetPosition(i), _enemies.EnemyRadius))
+            if (_isArc && !InArc(_enemies.GetPosition(i), _enemies.GetHitRadius(i)))
             {
                 continue;
             }
