@@ -1,6 +1,6 @@
 # Meta Progression
 
-Status: v1.2, 2026-11-14. Direction only: the first pillar is decided, the
+Status: v1.3, 2026-11-14. Direction only: the first pillar is decided, the
 shape of the system is not. A living design document: it records what is
 decided, marks proposals, and lists open questions.
 
@@ -64,7 +64,8 @@ Coins:
       run, or a mix? (Coins on the ground are picked up by touch, with no
       magnet.)
 - [ ] Are all collected coins kept on death, or only a part?
-- [ ] Are coins the only persistent currency?
+- [ ] Are coins the only persistent currency? Probably not: crafting
+      materials are proposed for smithing (see [smithing.md](smithing.md)).
 
 Upgrades:
 
@@ -91,3 +92,4 @@ Base area:
 | 2026-11-14 | v1 | First pillar recorded: currency collected in runs, spent on character upgrades in a base area reached after death. Shape undecided. |
 | 2026-11-14 | v1.1 | The currency is coins; different kinds of coin are worth different amounts. |
 | 2026-11-14 | v1.2 | Five coin kinds and their values; coins collected by touch. |
+| 2026-11-14 | v1.3 | Noted crafting materials (proposed in smithing.md) against the "only currency" question. |
