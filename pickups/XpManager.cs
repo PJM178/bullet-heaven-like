@@ -12,9 +12,10 @@ namespace BulletHeavenLike;
 ///      hover height.
 ///   2. Hover: it floats in place, bobbing (the bob is done on the GPU,
 ///      see pickups/xp_orb.gdshader).
-///   3. Home: after a short pause, an orb within MagnetRadius of the player
-///      flies at them, speeding up, and is absorbed: the player gains its
-///      XP. Orbs further away keep hovering until the player comes close.
+///   3. Home: after a short pause, an orb within the player's magnet
+///      radius (PlayerStats.MagnetRadius) flies at them, speeding up, and
+///      is absorbed: the player gains its XP. Orbs further away keep
+///      hovering until the player comes close.
 ///
 /// Same data layout as EnemyManager and ProjectileManager: plain arrays,
 /// one loop. Unlike those, orbs have no nodes at all. They are all drawn by
@@ -54,9 +55,8 @@ public partial class XpManager : Node3D
     [Export] public float HoverDelay = 0.35f;
 
     [ExportGroup("Homing")]
-    // Orbs closer than this (metres, on the ground) fly to the player.
-    // A natural thing for upgrades to increase.
-    [Export] public float MagnetRadius = 4.0f;
+    // How close orbs must be to start flying in is the player's stat,
+    // PlayerStats.MagnetRadius, shared with upgrades.
     // Speed an orb starts homing at, and how fast it speeds up (m/s²).
     [Export] public float HomingStartSpeed = 1.5f;
     [Export] public float HomingAcceleration = 30.0f;
@@ -199,7 +199,7 @@ public partial class XpManager : Node3D
         float dt = (float)delta;
         Vector3 playerPosition = Player.GlobalPosition;
         Vector3 absorbPoint = playerPosition + Vector3.Up * AbsorbHeight;
-        float magnetSquared = MagnetRadius * MagnetRadius;
+        float magnetSquared = Player.Stats.MagnetRadius * Player.Stats.MagnetRadius;
         float absorbSquared = AbsorbRadius * AbsorbRadius;
 
         // Backwards, because absorbing an orb moves the last orb into its

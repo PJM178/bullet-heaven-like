@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="WorldMarkerDefinition" format=3]
+
+[ext_resource type="Script" path="res://world_markers/WorldMarkerDefinition.cs" id="1_marker"]
+
+[resource]
+script = ExtResource("1_marker")
+DisplayName = "Ambush"
+Color = Color(0.9, 0.25, 0.2, 1)
+Shape = 1
+StartState = 1
+SenseRange = 30.0

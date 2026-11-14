@@ -8,7 +8,7 @@ namespace BulletHeavenLike;
 /// Turns a baked sprite sheet (<c>name.spritesheet</c> JSON + <c>name.png</c> atlas next
 /// to it) into a <see cref="SpriteFrames"/> resource. Godot runs this automatically
 /// whenever the .spritesheet file changes; you then load the .spritesheet path like any
-/// resource, e.g. <c>GD.Load&lt;SpriteFrames&gt;("res://local_assets/monsters/poring.spritesheet")</c>,
+/// resource, e.g. <c>GD.Load&lt;SpriteFrames&gt;("res://local_assets/characters/monsters/slime.spritesheet")</c>,
 /// or drag it into an AnimatedSprite3D's "Sprite Frames" slot.
 ///
 /// Every frame becomes an <see cref="AtlasTexture"/> padded with a margin to one shared

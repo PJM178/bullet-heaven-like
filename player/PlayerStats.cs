@@ -3,7 +3,8 @@ using Godot;
 namespace BulletHeavenLike;
 
 /// <summary>
-/// The player's numbers: health, experience and level. It lives as a
+/// The player's numbers: health, experience, level, coins and pickup
+/// ranges. It lives as a
 /// child node of the Player ("Stats") so the values can be edited in the
 /// Inspector, and so later stats (damage bonuses, ...) have an obvious
 /// home.
@@ -133,6 +134,51 @@ public partial class PlayerStats : Node
 
         Health = Mathf.Min(Health + hearts, MaxHealth);
         EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
+    }
+
+    // ---- Pickups ---------------------------------------------------------
+    // The ranges live here, on the player, rather than on the managers that
+    // use them, so an upgrade changes one stat and every system follows.
+
+    // Touch pickups (coins, hearts: PickupManager) are collected within
+    // this distance (metres, on the ground).
+    [Export] public float PickupRadius = 0.6f;
+
+    // XP orbs closer than this fly to the player (XpManager).
+    [Export] public float MagnetRadius = 4.0f;
+
+    // Emitted whenever Coins changes.
+    [Signal] public delegate void CoinsChangedEventHandler(int coins);
+
+    /// <summary>Coins collected this run. Not saved yet: keeping them
+    /// between runs is still open (docs/design/meta-progression.md).</summary>
+    public int Coins { get; private set; }
+
+    /// <summary>
+    /// Applies what a touch pickup does. Every pickup effect is handled in
+    /// this one switch, so "what does this pickup do?" has one answer.
+    /// </summary>
+    public void Collect(PickupDefinition pickup)
+    {
+        switch (pickup.Effect)
+        {
+            case PickupEffect.Coins:
+                AddCoins(pickup.Amount);
+                break;
+            case PickupEffect.Heal:
+                Heal(pickup.Amount);
+                break;
+        }
+    }
+
+    public void AddCoins(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+        Coins += amount;
+        EmitSignal(SignalName.CoinsChanged, Coins);
     }
 
     // ---- Experience ------------------------------------------------------

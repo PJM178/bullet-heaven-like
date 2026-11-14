@@ -31,6 +31,9 @@ public partial class ProjectileManager : Node3D
     // manager object in the scene.
     [Export] public EnemyManager EnemyManager;
 
+    // Props (barrels, ...) stop projectiles and take their damage. Optional.
+    [Export] public BreakableManager BreakableManager;
+
     // Godot runs _PhysicsProcess on nodes in order of this priority, lowest
     // first (EnemyManager keeps the default 0). Hit checks have to see
     // where enemies are *after* they moved and rebuilt their grid this
@@ -154,6 +157,11 @@ public partial class ProjectileManager : Node3D
                     Despawn(i);
                     continue;
                 }
+            }
+            if (BreakableManager != null && BreakableManager.HitTest(_positions[i], _radius[i], _damage[i]))
+            {
+                Despawn(i);
+                continue;
             }
 
             _nodes[i].Position = _positions[i];

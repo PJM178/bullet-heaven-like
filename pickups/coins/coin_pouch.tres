@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="PickupDefinition" format=3]
+
+[ext_resource type="Script" path="res://pickups/PickupDefinition.cs" id="1_pickup"]
+
+[resource]
+script = ExtResource("1_pickup")
+DisplayName = "Coin pouch"
+Amount = 500
+FramesPath = "res://local_assets/pickups/coin_pouch.spritesheet"
+PixelSize = 0.022

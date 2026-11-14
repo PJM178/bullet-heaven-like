@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="WorldMarkerDefinition" format=3]
+
+[ext_resource type="Script" path="res://world_markers/WorldMarkerDefinition.cs" id="1_marker"]
+
+[resource]
+script = ExtResource("1_marker")
+DisplayName = "Barrel"
+Color = Color(0.75, 0.55, 0.35, 1)
+Shape = 2
+ShowDistance = false
+SenseRange = 15.0

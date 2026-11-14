@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="PickupDefinition" format=3]
+
+[ext_resource type="Script" path="res://pickups/PickupDefinition.cs" id="1_pickup"]
+
+[resource]
+script = ExtResource("1_pickup")
+DisplayName = "Gold coin"
+Amount = 25
+FramesPath = "res://local_assets/pickups/coin_spin.spritesheet"

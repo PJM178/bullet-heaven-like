@@ -46,15 +46,17 @@ skills/                SkillDefinition (resource) and SkillManager (learned
                        skills, random level-up choices); each weapon's
                        <name>_skill.tres lives in its weapon folder
 pickups/               XP orbs and other collectables
+world_markers/         WorldMarkers (points of interest, events) shown on the minimap
 ui/                    layout, joystick, HUD
-props/                 level decoration
+props/                 level decoration; breakables/ (BreakableManager, definitions)
 art/                   Blender sources and generator scripts (.gdignore'd)
 docs/                  design/ (plans, decisions) and systems/ (as built);
                        .gdignore'd, indexed in docs/README.md
 addons/sprite_kit/     .spritesheet importer -> SpriteFrames, DirectionalSprite3D /
                        SpriteDirections, KeyframeEffect (.str effect player)
-local_assets/          local sprites/effects used in-game (git-ignored, but
-                       exported): monsters/, players/, effects/<name>/ (*.bin)
+local_assets/          local sprites/effects/models used in-game (git-ignored, but
+                       exported): characters/{players,monsters}/, pickups/,
+                       effects/<name>/ (*.bin), props/<category>/ (.glb)
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several

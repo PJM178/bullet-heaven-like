@@ -26,7 +26,7 @@ public partial class DirectionalSprite3D : AnimatedSprite3D
 
     /// <summary>
     /// A .spritesheet to load at startup when "Sprite Frames" is empty, e.g.
-    /// "res://local_assets/players/player_m.spritesheet". Stored as plain text instead of a
+    /// "res://local_assets/characters/players/player_m.spritesheet". Stored as plain text instead of a
     /// resource reference on purpose: res://local_assets/ is git-ignored, and a scene
     /// that references a missing resource fails to load in a fresh clone. With
     /// a text path the scene always loads; the sprite is just empty without local_assets/.

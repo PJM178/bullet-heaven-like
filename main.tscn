@@ -27,6 +27,21 @@
 [ext_resource type="Material" path="res://weapons/hammer/shockwave_material.tres" id="22_hammer_shockwave"]
 [ext_resource type="Material" path="res://weapons/hammer/chunks_material.tres" id="23_hammer_chunks"]
 [ext_resource type="Script" path="res://core/OptionalScene.cs" id="90_optional"]
+[ext_resource type="Script" path="res://pickups/PickupManager.cs" id="27_pickups"]
+[ext_resource type="Script" path="res://pickups/PlacedPickup.cs" id="28_placed"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_bronze.tres" id="29_coin_bronze"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_silver.tres" id="30_coin_silver"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_gold.tres" id="31_coin_gold"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_platinum.tres" id="32_coin_platinum"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_pouch.tres" id="33_coin_pouch"]
+[ext_resource type="Script" path="res://props/breakables/BreakableManager.cs" id="34_breakables"]
+[ext_resource type="Script" path="res://props/breakables/PlacedBreakable.cs" id="35_placed_breakable"]
+[ext_resource type="Resource" path="res://props/breakables/barrel.tres" id="36_barrel"]
+[ext_resource type="Script" path="res://world_markers/WorldMarkers.cs" id="40_world_markers"]
+[ext_resource type="Script" path="res://world_markers/PlacedMarker.cs" id="41_placed_marker"]
+[ext_resource type="Resource" path="res://world_markers/kinds/shrine.tres" id="42_marker_shrine"]
+[ext_resource type="Resource" path="res://world_markers/kinds/ruins.tres" id="43_marker_ruins"]
+[ext_resource type="Resource" path="res://world_markers/kinds/ambush.tres" id="44_marker_ambush"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -73,7 +88,7 @@ script = ExtResource("1_player")
 [node name="Sprite" type="AnimatedSprite3D" parent="Player/Model"]
 pixel_size = 0.02
 script = ExtResource("2_sprite")
-FramesPath = "res://local_assets/players/player_m.spritesheet"
+FramesPath = "res://local_assets/characters/players/player_m.spritesheet"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=51307331]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
@@ -91,16 +106,18 @@ StartingSkills = [ExtResource("25_sword_skill")]
 script = ExtResource("8_facing")
 Player = NodePath("..")
 
-[node name="SwordWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager")]
+[node name="SwordWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager", "BreakableManager")]
 script = ExtResource("15_sword")
 Player = NodePath("..")
 EnemyManager = NodePath("../../EnemyManager")
+BreakableManager = NodePath("../../BreakableManager")
 SlashMaterial = ExtResource("16_slash")
 
-[node name="HammerWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager")]
+[node name="HammerWeapon" type="Node3D" parent="Player" node_paths=PackedStringArray("Player", "EnemyManager", "BreakableManager")]
 script = ExtResource("18_hammer")
 Player = NodePath("..")
 EnemyManager = NodePath("../../EnemyManager")
+BreakableManager = NodePath("../../BreakableManager")
 HammerMaterial = ExtResource("19_hammer_sprite")
 HitMaterial = ExtResource("20_hammer_hit")
 RippleMaterial = ExtResource("21_hammer_ripple")
@@ -113,6 +130,36 @@ ScenePath = "res://research/player_extras.tscn"
 
 [node name="Bush" parent="." instance=ExtResource("4_bush")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -1.5)
+
+[node name="Barrel" type="Node3D" parent="."]
+transform = Transform3D(0.93969, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.93969, -2, 0, -2.5)
+script = ExtResource("35_placed_breakable")
+Definition = ExtResource("36_barrel")
+
+[node name="CoinBronze" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0, 1.5)
+script = ExtResource("28_placed")
+Definition = ExtResource("29_coin_bronze")
+
+[node name="CoinSilver" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.7, 0, 1.5)
+script = ExtResource("28_placed")
+Definition = ExtResource("30_coin_silver")
+
+[node name="CoinGold" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 0, 1.5)
+script = ExtResource("28_placed")
+Definition = ExtResource("31_coin_gold")
+
+[node name="CoinPlatinum" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.1, 0, 1.5)
+script = ExtResource("28_placed")
+Definition = ExtResource("32_coin_platinum")
+
+[node name="CoinPouch" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0, 1.5)
+script = ExtResource("28_placed")
+Definition = ExtResource("33_coin_pouch")
 
 [node name="EnemyManager" type="Node3D" parent="." node_paths=PackedStringArray("Target", "XpManager")]
 script = ExtResource("6_enemies")
@@ -131,8 +178,46 @@ script = ExtResource("13_xp")
 Player = NodePath("../Player")
 OrbMaterial = ExtResource("14_orb")
 
-[node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager")]
+[node name="PickupManager" type="Node3D" parent="." node_paths=PackedStringArray("Player")]
+script = ExtResource("27_pickups")
+Player = NodePath("../Player")
+
+[node name="ProjectileManager" type="Node3D" parent="." node_paths=PackedStringArray("EnemyManager", "BreakableManager")]
 script = ExtResource("9_projectiles")
 EnemyManager = NodePath("../EnemyManager")
+BreakableManager = NodePath("../BreakableManager")
+
+[node name="BreakableManager" type="Node3D" parent="." node_paths=PackedStringArray("PickupManager", "WorldMarkers")]
+script = ExtResource("34_breakables")
+PickupManager = NodePath("../PickupManager")
+WorldMarkers = NodePath("../WorldMarkers")
+HitFlashMaterial = ExtResource("12_flash")
+
+[node name="WorldMarkers" type="Node" parent="." node_paths=PackedStringArray("Player", "Camera")]
+script = ExtResource("40_world_markers")
+Player = NodePath("../Player")
+Camera = NodePath("../Camera3D")
+
+[node name="Markers" type="Node3D" parent="."]
+
+[node name="Shrine" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -35)
+script = ExtResource("41_placed_marker")
+Definition = ExtResource("42_marker_shrine")
+
+[node name="Ruins" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -45, 0, -45)
+script = ExtResource("41_placed_marker")
+Definition = ExtResource("43_marker_ruins")
+
+[node name="Ambush" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -38, 0, 25)
+script = ExtResource("41_placed_marker")
+Definition = ExtResource("44_marker_ambush")
+
+[node name="FarBarrel" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 14)
+script = ExtResource("35_placed_breakable")
+Definition = ExtResource("36_barrel")
 
 [editable path="Player/Model"]

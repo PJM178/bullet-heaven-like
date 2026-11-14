@@ -1,6 +1,6 @@
 # Player Character
 
-Status: v1, 2026-11-14. Documents the player **as built** in the prototype.
+Status: v1.3, 2026-11-14. Documents the player **as built** in the prototype.
 Nothing here is a proposal unless marked; planned changes belong in Open
 questions until they are decided.
 
@@ -70,7 +70,8 @@ from above: 0° front, 90° right, 180° back, 270° left
 - **Healing.** `PlayerStats.Heal` exists but nothing calls it yet: hearts
   cannot be regained in the prototype.
 - **HUD.** A row of hearts along the top of the screen; lost hearts stay as
-  dark, empty outlines.
+  dark, empty outlines. The minimap is in the top-right corner
+  ([minimap.md](minimap.md)).
 
 ## Experience and levels
 
@@ -118,7 +119,7 @@ There is no revive or continue: Restart begins a new run from level 1.
 - The walk cycle slows with the stick (never below 35% pace) so the feet do
   not slide at low speed. Idle holds a single frame.
 - The sprite sheet is a local asset
-  (`local_assets/players/player_m.spritesheet`), loaded by path. On a fresh
+  (`local_assets/characters/players/player_m.spritesheet`), loaded by path. On a fresh
   clone without it the character is invisible but the game still runs.
 
 ## Camera
@@ -160,13 +161,14 @@ There is no revive or continue: Restart begins a new run from level 1.
 | Piece | Where | Role |
 | --- | --- | --- |
 | `Player` | `player/Player.cs`, node `Player` in `main.tscn` | Movement, facing, animation choice, hurt blink, death frames. |
-| `PlayerStats` | `player/PlayerStats.cs`, child node `Stats` | Hearts, invulnerability, XP and level. Signals: `HealthChanged`, `Died`, `LeveledUp`. |
+| `PlayerStats` | `player/PlayerStats.cs`, child node `Stats` | Hearts, invulnerability, XP and level, coins, pickup radii; `Collect` applies pickups. Signals: `HealthChanged`, `Died`, `LeveledUp`, `CoinsChanged`. |
 | `SkillManager` | `skills/`, child node `Skills` | Learned skills and level-up choices; starts with the Sword. |
 | `CameraFollow` | `player/CameraFollow.cs` | Follow, shake, death shot. |
 | `VirtualJoystick` | `ui/`, `MoveStick` and `AimStick` in `game.tscn` | Presses the `move_*` / `aim_*` actions with analog strength. |
 | `PlayerHud`, `HeartIcon` | `ui/` | Heart row, updated only on `HealthChanged`. |
 | `LevelUpScreen`, `GameOverScreen` | `ui/` | Listen to `LeveledUp` and `Died`. |
-| `XpManager` | `pickups/` | Orbs, magnet radius, calls `Stats.AddExperience`. |
+| `XpManager` | `pickups/` | Orbs; reads `Stats.MagnetRadius`, calls `Stats.AddExperience`. |
+| `PickupManager` | `pickups/` | Touch pickups (coins); see [pickups.md](pickups.md). |
 | `FacingDebug` | `player/FacingDebug.cs` | Debug overlay drawing the facing frame on the ground. |
 | `LocalExtras` | child node of `Player` | Loads optional local-only extras if present. |
 
@@ -188,7 +190,8 @@ Tunable values and their defaults:
 | `XpPerLevel` | 1000, 1500, 2200, 3000 | `PlayerStats` |
 | `ContactRange` / `ContactDamage` | 0.9 m / 1 | `EnemyManager` |
 | `XpPerKill` | 100 | `EnemyManager` |
-| `MagnetRadius` | 4 m | `XpManager` |
+| `MagnetRadius` | 4 m | `PlayerStats` |
+| `PickupRadius` | 0.6 m | `PlayerStats` |
 
 Debug: the stress-test HUD has **Die** and **Level up** buttons.
 
@@ -199,3 +202,4 @@ Debug: the stress-test HUD has **Die** and **Level up** buttons.
 | 2026-11-14 | v1 | First player doc: controls, movement, hearts, XP and levels, death, look, camera as built. |
 | 2026-11-14 | v1.1 | Camera 20% closer: 40 m to 32 m. Death shot keeps its 7.2 m end distance (DeathZoom 0.18 to 0.225). |
 | 2026-11-14 | v1.2 | Death shot: sprites show the side the circling camera sees, also while paused. |
+| 2026-11-14 | v1.3 | `MagnetRadius` moved from `XpManager` to `PlayerStats`; added `PickupRadius`, `Coins`, `Collect`. |

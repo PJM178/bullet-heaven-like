@@ -22,6 +22,8 @@ public partial class SwordWeapon : Node3D
 {
     [Export] public Player Player;
     [Export] public EnemyManager EnemyManager;
+    // Props (barrels, ...) caught in the swing break too. Optional.
+    [Export] public BreakableManager BreakableManager;
 
     // Seconds between swings.
     [Export] public float Cooldown = 1.0f;
@@ -149,6 +151,9 @@ public partial class SwordWeapon : Node3D
 
             EnemyManager.Damage(enemy, Damage);
         }
+
+        // "?." skips the call when no BreakableManager is set.
+        BreakableManager?.DamageArc(origin, forward, Range, halfArc, Damage);
 
         StartSlashVisual(forward);
     }

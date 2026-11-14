@@ -12,4 +12,4 @@
 [node name="Sprite" type="AnimatedSprite3D" parent="Model"]
 pixel_size = 0.02
 script = ExtResource("1_sprite")
-FramesPath = "res://local_assets/monsters/enemy_basic.spritesheet"
+FramesPath = "res://local_assets/characters/monsters/enemy_basic.spritesheet"

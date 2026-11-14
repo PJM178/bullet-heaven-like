@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="BreakableDefinition" format=3]
+
+[ext_resource type="Script" path="res://props/breakables/BreakableDefinition.cs" id="1_def"]
+[ext_resource type="Script" path="res://pickups/LootDrop.cs" id="2_loot"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_bronze.tres" id="3_bronze"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_silver.tres" id="4_silver"]
+[ext_resource type="Resource" path="res://pickups/coins/coin_gold.tres" id="5_gold"]
+[ext_resource type="Resource" path="res://world_markers/kinds/barrel.tres" id="6_marker"]
+
+[sub_resource type="Resource" id="Loot_bronze"]
+script = ExtResource("2_loot")
+Pickup = ExtResource("3_bronze")
+Chance = 1.0
+MinCount = 2
+MaxCount = 4
+
+[sub_resource type="Resource" id="Loot_silver"]
+script = ExtResource("2_loot")
+Pickup = ExtResource("4_silver")
+Chance = 0.3
+
+[sub_resource type="Resource" id="Loot_gold"]
+script = ExtResource("2_loot")
+Pickup = ExtResource("5_gold")
+Chance = 0.05
+
+[resource]
+script = ExtResource("1_def")
+DisplayName = "Barrel"
+Health = 1.0
+Radius = 0.33
+Height = 0.8
+Marker = ExtResource("6_marker")
+ModelPath = "res://local_assets/props/barrels/barrel.glb"
+Slices = 8
+DustFramesPath = "res://local_assets/effects/smoke/smoke.spritesheet"
+Loot = Array[Resource]([SubResource("Loot_bronze"), SubResource("Loot_silver"), SubResource("Loot_gold")])

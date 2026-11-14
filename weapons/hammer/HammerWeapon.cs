@@ -33,6 +33,9 @@ public partial class HammerWeapon : Node3D
 {
     [Export] public Player Player;
     [Export] public EnemyManager EnemyManager;
+    // Props (barrels, ...) caught in the smash or the shockwave break too.
+    // Optional.
+    [Export] public BreakableManager BreakableManager;
 
     // Seconds between smashes.
     [Export] public float Cooldown = 2.0f;
@@ -214,7 +217,7 @@ public partial class HammerWeapon : Node3D
             Shockwave = BuildLayer(ShockwaveMaterial,
                 new PlaneMesh { Size = new Vector2(shockwaveSize, shockwaveSize) }, _impactTime + ShockwaveDelay),
             Debris = BuildDebris(),
-            Wave = new ExpandingWave(EnemyManager),
+            Wave = new ExpandingWave(EnemyManager, BreakableManager),
         };
     }
 
@@ -344,6 +347,7 @@ public partial class HammerWeapon : Node3D
         {
             EnemyManager.Damage(_targets[n], Damage);
         }
+        BreakableManager?.DamageCircle(cast.Target, SmashDiameter * 0.5f, Damage);
 
         // The shockwave starts at the smash circle's edge: everything inside
         // has just been hit by the hammer itself.

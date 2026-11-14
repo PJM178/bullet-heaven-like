@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="WorldMarkerDefinition" format=3]
+
+[ext_resource type="Script" path="res://world_markers/WorldMarkerDefinition.cs" id="1_marker"]
+
+[resource]
+script = ExtResource("1_marker")
+DisplayName = "Shrine"
+Color = Color(1, 0.82, 0.35, 1)
+Shape = 0
+RumourRange = 60.0
+SenseRange = 30.0

@@ -1,6 +1,8 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://ui/PlayerHud.cs" id="1_hud"]
+[ext_resource type="Script" path="res://ui/CompassBar.cs" id="2_compass"]
+[ext_resource type="Script" path="res://ui/Minimap.cs" id="3_minimap"]
 
 [node name="PlayerHud" type="CanvasLayer"]
 script = ExtResource("1_hud")
@@ -15,3 +17,28 @@ grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 12
 alignment = 1
+
+[node name="CompassBar" type="Control" parent="."]
+process_mode = 4
+visible = false
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 40.0
+offset_top = 20.0
+offset_right = -40.0
+offset_bottom = 116.0
+grow_horizontal = 2
+mouse_filter = 2
+script = ExtResource("2_compass")
+
+[node name="Minimap" type="Control" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -420.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 420.0
+grow_horizontal = 0
+mouse_filter = 2
+script = ExtResource("3_minimap")

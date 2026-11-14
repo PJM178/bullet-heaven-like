@@ -39,6 +39,7 @@ public sealed class ExpandingWave
     private const int MaxRemembered = 256;
 
     private readonly EnemyManager _enemies;
+    private readonly BreakableManager _breakables; // may be null
     private readonly int[] _targets = new int[MaxTargets];
     // IDs (EnemyManager.GetId) of the enemies this wave has hit.
     private readonly int[] _hitIds = new int[MaxRemembered];
@@ -61,9 +62,12 @@ public sealed class ExpandingWave
     // "{ get; private set; }": anyone can read it, only this class changes it.
     public bool Active { get; private set; }
 
-    public ExpandingWave(EnemyManager enemies)
+    // "= null" makes the second argument optional: a weapon without props
+    // to break can leave it out.
+    public ExpandingWave(EnemyManager enemies, BreakableManager breakables = null)
     {
         _enemies = enemies;
+        _breakables = breakables;
     }
 
     /// <summary>
@@ -140,6 +144,10 @@ public sealed class ExpandingWave
                 _hitCount++;
             }
         }
+
+        // Props don't walk into the wave, so they need no catch-up strip:
+        // only the newly covered band, which passes each prop exactly once.
+        _breakables?.DamageRing(_centre, _sweptRadius, radius, _damage, _isArc, _direction, _halfAngle);
 
         _sweptRadius = radius;
         return hits;
