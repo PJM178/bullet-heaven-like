@@ -16,6 +16,13 @@ public partial class DirectionalSprite3D : AnimatedSprite3D
     // from C# creates a new object every call, which adds up with many enemies.
     private string _anim = "";
     private int _direction = -1;
+    // The world direction from the last PlayFacing, so RefreshFacing can
+    // re-pick the drawn direction when the camera moves.
+    private Vector3 _facing;
+
+    /// <summary>Every DirectionalSprite3D joins this group (see _Ready), so a
+    /// moving camera can refresh them all with GetTree().CallGroup.</summary>
+    public const string Group = "directional_sprites";
 
     /// <summary>
     /// A .spritesheet to load at startup when "Sprite Frames" is empty, e.g.
@@ -37,6 +44,19 @@ public partial class DirectionalSprite3D : AnimatedSprite3D
         }
         if (SpriteFrames != null)
             SpriteDirections.Setup(this);
+        AddToGroup(Group);
+    }
+
+    /// <summary>
+    /// Re-picks the drawn direction for the current animation and facing as
+    /// seen from <paramref name="camera"/>. For when the camera turns while
+    /// the character doesn't (e.g. a camera circling a paused scene).
+    /// </summary>
+    public void RefreshFacing(Camera3D camera)
+    {
+        // Nothing played yet: there's no animation to turn.
+        if (_anim != "")
+            PlayFacing(_anim, _facing, camera);
     }
 
     /// <summary>
@@ -50,6 +70,7 @@ public partial class DirectionalSprite3D : AnimatedSprite3D
         if (SpriteFrames == null)
             return;
 
+        _facing = facing;
         int direction = SpriteDirections.DirectionIndex(facing, camera);
         // Reference comparison is enough: callers pass string literals, and C#
         // gives every identical literal the same string object.
@@ -59,9 +80,16 @@ public partial class DirectionalSprite3D : AnimatedSprite3D
 
         int frame = Frame;
         float progress = FrameProgress;
+        bool wasPlaying = IsPlaying();
         Play(SpriteDirections.AnimationName(anim, direction));
         if (sameAnim)
+        {
             SetFrameAndProgress(frame, progress);
+            // Turning shouldn't restart a paused or finished animation
+            // (a held pose, a corpse's last frame): Play() would.
+            if (!wasPlaying)
+                Pause();
+        }
 
         _anim = anim;
         _direction = direction;

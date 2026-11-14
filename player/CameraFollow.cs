@@ -28,7 +28,7 @@ public partial class CameraFollow : Camera3D
     // drops (0 = same angle, 1 = level with the ground), how fast it
     // circles (degrees per second; 0 = holds still) and how long the swoop
     // in takes (seconds).
-    [Export(PropertyHint.Range, "0.1,1,0.05")] public float DeathZoom = 0.18f;
+    [Export(PropertyHint.Range, "0.1,1,0.005")] public float DeathZoom = 0.225f;
     [Export(PropertyHint.Range, "0,1,0.05")] public float DeathLower = 0.4f;
     [Export] public float DeathOrbitSpeed = 22.0f;
     [Export] public float DeathZoomDuration = 3.0f;
@@ -180,6 +180,13 @@ public partial class CameraFollow : Camera3D
         // LookAt turns the camera to face a point; Vector3.Up says which
         // way is up, so it doesn't roll.
         LookAt(focus, Vector3.Up);
+
+        // The camera now sees every character from a new side, so each
+        // 8-direction sprite re-picks which drawn direction to show.
+        // Normally the characters do this themselves as they move, but
+        // once the game is paused their scripts stop running. CallGroup
+        // calls the method on every node in the group, paused or not.
+        GetTree().CallGroup(DirectionalSprite3D.Group, DirectionalSprite3D.MethodName.RefreshFacing, this);
     }
 
     // The player moves in _PhysicsProcess, so the camera follows in the same
