@@ -49,6 +49,7 @@ pickups/               XP orbs and other collectables
 ui/                    layout, joystick, HUD
 props/                 level decoration
 art/                   Blender sources and generator scripts (.gdignore'd)
+docs/                  design documents (.gdignore'd), indexed in docs/README.md
 addons/sprite_kit/     .spritesheet importer -> SpriteFrames, DirectionalSprite3D /
                        SpriteDirections, KeyframeEffect (.str effect player)
 local_assets/          local sprites/effects used in-game (git-ignored, but
@@ -62,6 +63,13 @@ weapons goes in `weapons/` itself. All C# stays in the single
 Move or rename files with the Godot editor's FileSystem dock, which updates
 references. From outside the editor (editor closed), `git mv` the file
 together with its `.uid` / `.import` sidecars and rewrite its `res://` paths.
+
+## Design docs
+
+The index below is imported into every session; the docs it lists are not.
+Open only the doc a task needs.
+
+@docs/README.md
 
 ## Local assets
 
