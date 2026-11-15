@@ -37,6 +37,17 @@ public partial class StressTestHud : CanvasLayer
         // Lose every heart at once, to test the death sequence.
         GetNode<Button>("%DieButton").Pressed += () => Player?.Stats.Kill();
         GetNode<Button>("%LevelUpButton").Pressed += LevelUp;
+        // A toggle button stays pressed in until pressed again; Toggled
+        // passes its new state. While on, nothing can take a heart.
+        Button invulnerable = GetNode<Button>("%InvulnerableButton");
+        invulnerable.Toggled += on =>
+        {
+            if (Player != null)
+            {
+                Player.Stats.DebugInvulnerable = on;
+            }
+            invulnerable.Text = on ? "Invuln\nON" : "Invuln\noff";
+        };
     }
 
     /// <summary>

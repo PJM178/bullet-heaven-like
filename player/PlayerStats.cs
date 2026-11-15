@@ -70,6 +70,14 @@ public partial class PlayerStats : Node
 
     private float _invulnerableTimeLeft;
 
+    /// <summary>
+    /// Debug: while true, TakeDamage never lands, so the player can't be
+    /// hurt by anything. Kept apart from IsInvulnerable (the short window
+    /// after a hit) so the Player doesn't blink the whole time. Kill() still
+    /// works, for the debug Die button. Toggled from the debug HUD.
+    /// </summary>
+    public bool DebugInvulnerable { get; set; }
+
     public override void _Ready()
     {
         // Upgrades bought between runs first, so a stat they raise (later
@@ -112,7 +120,7 @@ public partial class PlayerStats : Node
     public bool TakeDamage(int hearts = 1)
     {
         // "hearts = 1" is a default value: TakeDamage() means one heart.
-        if (hearts <= 0 || IsDead || IsInvulnerable)
+        if (hearts <= 0 || IsDead || IsInvulnerable || DebugInvulnerable)
         {
             return false;
         }

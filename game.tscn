@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://ui/level_up_screen.tscn" id="6_levelup"]
 [ext_resource type="PackedScene" path="res://ui/player_hud.tscn" id="7_hud"]
 [ext_resource type="PackedScene" path="res://ui/game_over_screen.tscn" id="8_gameover"]
+[ext_resource type="PackedScene" path="res://ui/debug_stats_panel.tscn" id="9_stats"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -89,6 +90,10 @@ XpManager = NodePath("../Layout/GameView/SubViewport/World/XpManager")
 Player = NodePath("../Layout/GameView/SubViewport/World/Player")
 
 [node name="PauseMenu" parent="." instance=ExtResource("5_pause")]
+
+[node name="DebugStatsPanel" parent="." node_paths=PackedStringArray("Player", "Skills") instance=ExtResource("9_stats")]
+Player = NodePath("../Layout/GameView/SubViewport/World/Player")
+Skills = NodePath("../Layout/GameView/SubViewport/World/Player/Skills")
 
 [node name="LevelUpScreen" parent="." node_paths=PackedStringArray("Stats", "Skills") instance=ExtResource("6_levelup")]
 Stats = NodePath("../Layout/GameView/SubViewport/World/Player/Stats")

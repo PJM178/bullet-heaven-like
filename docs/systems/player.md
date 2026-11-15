@@ -197,7 +197,17 @@ Tunable values and their defaults:
 | `MagnetRadius` | 4 m (+ Magnet upgrade) | `PlayerStats` |
 | `PickupRadius` | 0.6 m | `PlayerStats` |
 
-Debug: the stress-test HUD has **Die** and **Level up** buttons (in a 3-column grid with the enemy count buttons).
+Debug: the stress-test HUD has **Die**, **Level up** and **Invuln** buttons
+(in a 3-column grid with the enemy count buttons). Invuln toggles
+`PlayerStats.DebugInvulnerable`: `TakeDamage` never lands while it is on
+(no blinking; `Kill` still works). It resets with the run.
+
+`DebugStatsPanel` (`ui/debug_stats_panel.tscn`, in `game.tscn`): a **Stats**
+button on the right edge under the minimap. It pauses the game (unless
+something else already has) and shows hearts, level, XP, coins, speed,
+pickup/magnet radius, hit invulnerability, debug invulnerability and
+learned skills in a centred panel. Close or the pause key hides it and
+unpauses. The button hides on death.
 
 ## Changelog
 
@@ -209,3 +219,4 @@ Debug: the stress-test HUD has **Die** and **Level up** buttons (in a 3-column g
 | 2026-11-14 | v1.3 | `MagnetRadius` moved from `XpManager` to `PlayerStats`; added `PickupRadius`, `Coins`, `Collect`. |
 | 2026-11-15 | v1.4 | Death banks the coins; Menu button beside Rise again; `PlayerStats.ApplyUpgrade` for meta upgrades. |
 | 2026-11-15 | v1.5 | Tap or click on the death screen fast-forwards to the buttons. |
+| 2026-11-15 | v1.6 | Debug: Stats panel (pauses, shows player stats) and Invuln toggle. |
