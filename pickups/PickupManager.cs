@@ -6,8 +6,9 @@ namespace BulletHeavenLike;
 /// Owns every pickup in the world except XP orbs (coins, hearts, ...), and
 /// collects them when the player touches them.
 ///
-/// <see cref="Drop"/> is the one way a pickup enters the world: enemy loot,
-/// chests and placed pickups (<see cref="PlacedPickup"/>) all go through it.
+/// <see cref="Drop"/> is the one way a pickup enters the world: loot
+/// (<see cref="DropLoot"/>) and placed pickups (<see cref="PlacedPickup"/>)
+/// all go through it.
 /// What a pickup looks like and does comes from its
 /// <see cref="PickupDefinition"/>; what collecting it does is in
 /// <see cref="PlayerStats.Collect"/>.
@@ -106,6 +107,34 @@ public partial class PickupManager : Node3D
             sprite.Frame = _random.RandiRange(0, frameCount - 1);
         }
         sprite.Visible = true;
+    }
+
+    /// <summary>
+    /// Rolls every line of <paramref name="table"/> and drops what comes
+    /// up, scattered at random within <paramref name="scatter"/> metres of
+    /// <paramref name="centre"/>. The one place loot is rolled: breakables,
+    /// chests, events and enemies all hand their table to this.
+    /// </summary>
+    public void DropLoot(LootTable table, Vector3 centre, float scatter)
+    {
+        if (table == null)
+            return;
+
+        foreach (LootDrop line in table.Drops)
+        {
+            // "?." gives null if line is null, and "?? 0" turns that into
+            // 0, so an empty slot in the list drops nothing.
+            int count = line?.Roll(_random) ?? 0;
+            for (int n = 0; n < count; n++)
+            {
+                // A random point in a circle. The square root spreads the
+                // points evenly; without it they would bunch in the middle.
+                float angle = _random.Randf() * Mathf.Tau;
+                float distance = Mathf.Sqrt(_random.Randf()) * scatter;
+                Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * distance;
+                Drop(line.Pickup, centre + offset);
+            }
+        }
     }
 
     public override void _PhysicsProcess(double delta)

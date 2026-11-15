@@ -72,7 +72,27 @@ public partial class PlayerStats : Node
 
     public override void _Ready()
     {
+        // Upgrades bought between runs first, so a stat they raise (later
+        // MaxHealth, say) is already raised when it's used below. "?." skips
+        // the call if there is no Profile (the autoload is missing).
+        Profile.Instance?.ApplyUpgrades(this);
         Health = MaxHealth;
+    }
+
+    /// <summary>
+    /// Adds a meta upgrade's bonus to its stat. Every upgrade stat is
+    /// handled in this one switch, like pickup effects in Collect. The
+    /// exported values above stay the base; the bonus goes on top once,
+    /// at the start of the run (see Profile.ApplyUpgrades).
+    /// </summary>
+    public void ApplyUpgrade(UpgradeStat stat, float bonus)
+    {
+        switch (stat)
+        {
+            case UpgradeStat.MagnetRadius:
+                MagnetRadius += bonus;
+                break;
+        }
     }
 
     public override void _PhysicsProcess(double delta)
@@ -150,8 +170,8 @@ public partial class PlayerStats : Node
     // Emitted whenever Coins changes.
     [Signal] public delegate void CoinsChangedEventHandler(int coins);
 
-    /// <summary>Coins collected this run. Not saved yet: keeping them
-    /// between runs is still open (docs/design/meta-progression.md).</summary>
+    /// <summary>Coins collected this run. They are banked into the
+    /// Profile on death (GameOverScreen), all of them.</summary>
     public int Coins { get; private set; }
 
     /// <summary>

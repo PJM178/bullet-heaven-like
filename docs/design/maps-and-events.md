@@ -44,11 +44,11 @@ Open questions.
 ## Where the prototype is today
 
 - There is one map and no map selection.
-- `WorldMarkers` puts points of interest on the minimap with reveal states,
-  using prototype markers (see [systems/minimap.md](../systems/minimap.md)).
+- Points of interest show on the minimap with reveal states, using
+  prototype markers (see [systems/minimap.md](../systems/minimap.md)).
   There are no events to complete yet.
-- Nothing persists between runs, so an unlock could not be kept yet (see
-  [meta-progression.md](meta-progression.md)).
+- Coins and upgrades are now kept between runs (see
+  [meta-progression.md](meta-progression.md)); map unlocks aren't saved yet.
 
 ## Open questions
 

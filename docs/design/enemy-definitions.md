@@ -1,47 +1,41 @@
 # Enemy definitions
 
-Status: decided and built, 2026-11-14.
+Status: decided and built, 2026-11-14. How it is built:
+[systems/enemies.md](../systems/enemies.md).
 
 ## Problem
 
-Everything about an enemy was one value on `EnemyManager` (one scene, one
-speed, health, hit radius, body radius...), so the game could only have one
-kind of enemy. A second kind (a big brute, a small rat) needs its own size,
-speed and looks.
+Everything about an enemy used to be one setting for all enemies, so the
+game could only have one kind of enemy. A second kind (a big brute, a small
+rat) needs its own size, speed, health and looks.
 
 ## Decisions
 
-- **`EnemyDefinition`** resource per kind, saved under `enemies/kinds/`, like
-  `BreakableDefinition` and `PickupDefinition`: `Scene` (+ `FallbackScene`
-  when local sprite frames are missing), `Speed`, `MaxHealth`,
-  `ContactDamage`, `ContactRange`, `XpPerKill`, `HitRadius` (weapons),
-  `BodyRadius` (walls), `PoolSize`, `CorpsePoolSize`.
-- **One node pool per definition**, chosen over one shared pool that swaps
-  models: kinds have different scenes, and swapping models at spawn would
-  mean instancing at run time. Each kind's `PoolSize` caps how many of it
-  can be alive; all pools together are `EnemyManager.MaxEnemies`.
-- Live enemies stay packed in `EnemyManager`'s arrays (swap remove) with a
-  kind index each. Idle nodes wait on a per-kind stack; despawning pushes
-  the node back, so the live arrays and the node pools are independent.
-- Callers ask an enemy's size: `GetHitRadius(i)` (sword wedge, wave arcs).
-- `WorldObstacles.PushOut` takes the radius per call and checks every cell
-  the circle overlaps, so any `BodyRadius` works without a global maximum.
-- Which kind spawns: for now `EnemyManager.Kinds` + `SpawnWeights` (a
-  missing weight is 1), among kinds with idle nodes. A wave/spawn system
-  can take this over later.
-- Crowd settings stay on the manager: `SeparationRadius`,
-  `SeparationStrength`, `StopDistance`, `ArriveSlowdown`.
+- **Each kind of enemy is data:** looks, speed, health, contact damage, XP,
+  size, and how many of it can be alive at once. Like pickups and
+  breakables, a new kind is a new file, not new code.
+- **Two sizes per kind:** how big it is for weapons (what a swing catches)
+  and how big its body is for walls, since the two need not match.
+- **Each kind has its own fixed pool of enemies**, made when the run
+  starts, rather than one shared pool whose enemies change looks. Kinds
+  look too different to swap cheaply mid-run, and making enemies during
+  play causes hitches on the phone. The pool size also caps how many of
+  a kind can be on screen.
+- **Which kind spawns is chosen by weight** for now. A wave or spawn
+  system can take this over later.
+- **Crowd behaviour is shared** by all kinds for now (how enemies keep
+  apart and where they stop near the player).
 
 ## Open questions
 
-- Separation should probably use the two enemies' `BodyRadius` sums
-  instead of one `SeparationRadius` (big enemies overlap small ones now).
-- `StopDistance` per kind (a big enemy should stop further out).
+- Crowd behaviour per kind: a big enemy should keep further from small
+  ones and stop further from the player.
 - A wave system: which kinds spawn when, and how many.
-- Pool sizes cost memory and start-up time per kind; size them per map.
+- Pool sizes per map, since each pool costs memory and start-up time.
 
 ## Changelog
 
 | Date | Change |
 | --- | --- |
 | 2026-11-14 | EnemyDefinition, per-definition pools, per-kind hit/body radii; MaxAgentRadius removed. |
+| 2026-11-15 | Technical detail moved to systems/enemies.md. |

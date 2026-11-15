@@ -23,43 +23,36 @@ room (a 3.36 m wall hides about 5.8 m of floor behind it).
 
 ## Decisions
 
-- One reusable component, `WalkInSpace`, on the Area3D that covers the
-  inside. It knows nothing about houses: a space lists its pieces in
-  three groups, and any level geometry can use it.
-  - *Always hide*: roofs, ceilings, upper floors.
-  - *Facing pieces*: hidden when their outer face (local +Z, the kit's
-    wall convention) points toward the camera. Walls.
-  - *Edge pieces*: hidden when they stand on the camera's side of the
-    centre. Posts, pillars, anything without a clear facing.
-- Containers are listed, not single pieces, so a generated building only
-  names its `Walls`, `Posts` and `Roof` nodes.
-- Edge pieces are measured in fractions of the inside box's half size, so
-  a long room treats all its corners alike: the corner posts where the cut
-  ends stay and cover the cut wall ends.
-- The direction is the camera's own (its flattened back axis), not the
-  direction from the room to the camera, so the cut is the same wherever
-  the room is on screen. It is re-chosen every frame while the player is
-  inside, so a turning camera still works.
-- Cut walls and posts are **lowered to stubs** (0.5 m, a shader discards
-  everything above), not hidden. Hiding them fully lost the room's
-  outline: once inside, you could no longer see where the doorway was.
-  The stub keeps the piece's own texture (no squashing, unlike scaling it
-  down). Roofs are still hidden outright.
-- Only visuals change. Collision is on separate nodes and stays.
-- Enemies are not physics bodies; walls stop them through
-  `WorldObstacles` (see [enemy-navigation.md](enemy-navigation.md)).
+- **One reusable cutaway that knows nothing about houses.** Any enterable
+  place (house, cave, ruin) lists its pieces in three groups:
+  - *Always hidden* while inside: roofs, ceilings, upper floors.
+  - *Facing pieces*, cut when their outside faces the camera: walls.
+  - *Edge pieces*, cut when they stand on the camera's side of the room:
+    posts, pillars, anything without a clear facing.
+- Pieces are listed by group, not one by one, so a generated building
+  only names its walls, posts and roof.
+- A long room treats all its corners alike: the corner posts where the
+  cut ends stay and cover the cut wall ends.
+- The cut follows the camera's direction, not where the room is on
+  screen, so it looks the same wherever the room is, and it keeps up if
+  the camera turns.
+- **Cut walls and posts are lowered to low stubs (0.5 m), not hidden.**
+  Hiding them fully lost the room's outline: once inside, you could no
+  longer see where the doorway was. The stub keeps the wall's own
+  texture. Roofs are still hidden outright.
+- **Only looks change.** Walls still block the player, enemies and attacks
+  (see [enemy-navigation.md](enemy-navigation.md)).
 
 ## Open questions
 
 - Fade mode (option 3) for spaces where hiding pops too much.
 - Stub tops are open (you look into the hollow wall). A cap colour could
   be drawn on the cut if it reads badly.
-- Should hidden walls still cast shadows (`CastShadow = ShadowsOnly`)?
-  Moot while the main light has no shadows.
-- Spaces inside spaces (a room in a cave): each its own `WalkInSpace`
-  should work, but untested.
-- The house generator (`kit_to_gltf.py house`) could attach the component
-  itself, so regenerated scenes keep it.
+- Should hidden walls still cast shadows? Moot while the main light has
+  no shadows.
+- Spaces inside spaces (a room in a cave): should work, but untested.
+- The house generator could attach the cutaway itself, so regenerated
+  buildings keep it.
 
 ## Changelog
 
@@ -67,3 +60,4 @@ room (a 3.36 m wall hides about 5.8 m of floor behind it).
 | --- | --- |
 | 2026-11-14 | Cutaway chosen; `WalkInSpace` built and used on the small house. |
 | 2026-11-14 | Cut pieces become low stubs instead of vanishing, so doorways stay readable. |
+| 2026-11-15 | Implementation detail left to the systems doc. |

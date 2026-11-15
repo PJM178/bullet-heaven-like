@@ -37,7 +37,7 @@ Files are grouped by **feature**, not by type: a script lives next to the
 scenes, models, shaders and materials it belongs to.
 
 ```
-game.tscn, main.tscn   entry scenes (UI shell, and the 3D world)
+game.tscn, main.tscn   a run (UI shell, and the 3D world); ui/title_menu.tscn starts the game
 core/                  shared by everything (base PS1 shader, hit flash,
                        WorldObstacles: walls/props that block movement and attacks)
 player/                Player, camera, player model
@@ -48,9 +48,11 @@ weapons/<name>/        one folder per weapon (sword/, hammer/, ...); projectiles
 skills/                SkillDefinition (resource) and SkillManager (learned
                        skills, random level-up choices); each weapon's
                        <name>_skill.tres lives in its weapon folder
-pickups/               XP orbs and other collectables
+pickups/               XP orbs and other collectables; LootTable (what anything drops)
+meta/                  between runs: Profile (save, autoload), UpgradeDefinition,
+                       upgrades/ (.tres), upgrade menu
 world_markers/         WorldMarkers (points of interest, events) shown on the minimap
-ui/                    layout, joystick, HUD
+ui/                    title menu (main scene), layout, joystick, HUD
 props/                 level decoration; breakables/ (BreakableManager, definitions),
                        walk_in/ (WalkInSpace: cutaway with wall stubs for enterable spaces)
 art/                   Blender sources and generator scripts (.gdignore'd)

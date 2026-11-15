@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://meta/UpgradeDefinition.cs" id="1_upgrade"]
+
+[resource]
+script = ExtResource("1_upgrade")
+Id = "magnet_radius"
+DisplayName = "Magnet"
+Description = "XP orbs fly to you from further away."
+Stat = 0
+BonusPerLevel = 0.75
+Unit = " m"
+Costs = PackedInt32Array(10, 25, 50, 100, 200)

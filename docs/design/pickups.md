@@ -1,6 +1,6 @@
 # Pickups — Architecture
 
-Status: v1, 2026-11-14. Decided and built; how it works today is in
+Status: v1.2, 2026-11-15. Decided and built; how it works today is in
 [systems/pickups.md](../systems/pickups.md). This doc keeps the reasoning.
 
 ## Overview
@@ -13,27 +13,28 @@ pickups are rare, collected by touch, and differ only in data.
 
 ## Decisions
 
-1. **One `PickupDefinition` resource per kind of pickup** (a `.tres`, like
-   `SkillDefinition`): look, effect, amount. A new pickup kind is a new file,
-   not new code. The five coin tiers are five definitions.
-2. **One `PickupManager` for every pickup except XP orbs.** Arrays, one loop,
-   a pooled sprite per pickup, collected by touch. `Drop(definition,
-   position)` is the single entry point: enemy loot, chests, debug and
-   placed pickups all use it.
-3. **Effects in one place:** `PlayerStats.Collect` switches on an effect
-   enum. Simple, readable, and one answer to "what does this pickup do?".
-   If effects outgrow a switch, they become one resource subclass per effect.
-4. **Pickup ranges are player stats** (`PlayerStats.PickupRadius`,
-   `MagnetRadius`), not manager settings, so an upgrade changes one value
-   and every system follows.
-5. **XP orbs stay on their own path** (`XpManager`, one MultiMesh). Folding
-   them in would slow them down or complicate the general manager.
-6. **Hand-placed pickups** are `PlacedPickup` markers that hand themselves to
-   the manager when the game starts, so placed and dropped pickups behave
-   the same.
+1. **Each kind of pickup is data** (look, effect, amount), like skills. A
+   new pickup kind is a new file, not new code. The five coin tiers are
+   five kinds.
+2. **One system for every pickup except XP orbs**, and one way for a
+   pickup to enter the world: enemy loot, chests, debug and placed
+   pickups all drop through it.
+3. **What each pickup does is decided in one place**, so "what does this
+   pickup do?" has one answer.
+4. **Pickup ranges are player stats**, not settings of the pickup systems,
+   so an upgrade (like the Magnet) changes one value and everything
+   follows.
+5. **XP orbs stay separate.** There are thousands of them, pulled in by a
+   magnet and merged when there are too many; folding them in would slow
+   them down or complicate everything else.
+6. **Pickups placed by hand in a level behave exactly like dropped ones.**
 7. **Coins have no magnet:** they are collected by walking over them.
-8. **No shared homing helper:** with one user (XP) it would be an
-   abstraction without a second case.
+8. **Loot comes from loot tables** (2026-11-15): lines of "this chance of
+   dropping this many of this pickup", rolled in one shared place.
+   Breakables, chests, events and any later source each just hold a
+   table; a table can be shared, so tuning it changes every source using it.
+9. **No shared homing for pickups:** only XP orbs fly to the player, so a
+   general version would be an abstraction without a second use.
 
 ## Open questions
 
@@ -47,3 +48,5 @@ pickups are rare, collected by touch, and differ only in data.
 | Date | Version | Change |
 | --- | --- | --- |
 | 2026-11-14 | v1 | Architecture decided and built: definitions, PickupManager, effects in PlayerStats, radii on the player, XP separate. |
+| 2026-11-15 | v1.1 | Decision 8: LootTable + DropLoot, one place for loot from any source. |
+| 2026-11-15 | v1.2 | Class names left to the systems doc. |

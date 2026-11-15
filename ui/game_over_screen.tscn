@@ -115,14 +115,29 @@ material = SubResource("ShaderMaterial_summary")
 layout_mode = 2
 theme_override_colors/font_color = Color(0.72, 0.69, 0.64, 1)
 theme_override_font_sizes/font_size = 34
-text = "Level 1     0 slain"
+text = "Level 1     0 slain
++0 coins"
 horizontal_alignment = 1
 
-[node name="RestartButton" type="Button" parent="Center/Rows"]
+[node name="Buttons" type="HBoxContainer" parent="Center/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 40
+alignment = 1
+
+[node name="RestartButton" type="Button" parent="Center/Rows/Buttons"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 100)
 layout_mode = 2
-size_flags_horizontal = 4
 focus_mode = 0
 theme_override_font_sizes/font_size = 36
 text = "Rise again"
+
+[node name="MenuButton" type="Button" parent="Center/Rows/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 100)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 36
+text = "Menu"

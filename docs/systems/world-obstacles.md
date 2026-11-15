@@ -1,6 +1,6 @@
 # World obstacles
 
-Status: v2, 2026-11-14. Documents walls and solid props **as built**: how
+Status: v2.3, 2026-11-15. Documents walls and solid props **as built**: how
 they stop enemies and attacks. Why it is shaped this way:
 [design/enemy-navigation.md](../design/enemy-navigation.md).
 
@@ -26,7 +26,7 @@ Walls and unbroken breakable props are kept as simple ground shapes in
 | Enemy contact (in `EnemyManager`) | enemy -> player, for enemies within `ContactRange` | contact damage |
 
   Projectiles: `ProjectileManager` is the only code that moves them (see
-  [design/projectiles.md](../design/projectiles.md)), and tests each step's
+  [projectiles.md](projectiles.md)), and tests each step's
   path with `IsLineBlocked(previous, next)`, so every projectile weapon is
   covered.
 
@@ -75,6 +75,27 @@ doorway and barrel; no contact damage through the wall),
 `research/tests/sealed_room_test.gd` (doorway sealed, each weapon alone for
 10 s with enemies outside: any kill is a leak).
 
+## Cost estimates (before building)
+
+| Approach | Cost with 300-600 enemies | Verdict |
+| --- | --- | --- |
+| `CharacterBody3D` + `MoveAndSlide` per enemy | Several shape casts and engine calls each per step; likely several ms on the phone; breaks the pooled arrays | No |
+| `PhysicsServer3D` shape query per enemy | One engine call each per step | Possible, not ideal |
+| Own obstacle shapes in a grid, push out after moving | A dictionary lookup and a few sums per enemy | **Built** |
+| Pathfinding: `NavigationAgent3D` per enemy | Grows with enemy count; crowd avoidance is heavy | No |
+| Pathfinding: one shared flow field from the player | One BFS over a grid near the player when the player changes cell; O(1) per enemy | **Planned** |
+
+## Planned changes
+
+Step 2 of [design/enemy-navigation.md](../design/enemy-navigation.md), not
+built: a flow field. Rasterise the obstacles into a fine grid (about 0.5 m,
+so a 1.43 m doorway stays open), BFS outward from the player's cell when
+the player changes cell; enemies follow the field near obstacles and keep
+steering straight elsewhere. It reads the same `WorldObstacles` shapes.
+
+Moving obstacles (doors that open) would need `Remove` + `Add` or a
+dedicated update call; obstacles are read once today.
+
 ## Open questions
 
 - XP orbs and pickups are pulled through walls by the magnet radius.
@@ -89,3 +110,4 @@ doorway and barrel; no contact damage through the wall),
 | 2026-11-14 | v2 | Walls block attacks, projectiles and contact (`IsLineBlocked`, `BlocksAttacks`); renamed to WorldObstacles / ObstacleBlocker and moved to `core/`. |
 | 2026-11-14 | v2.1 | Wall check moved into the hit queries (no per-weapon checks); `ClipLine` + `WeaponTargeting.SpotAhead` for fallback spots. |
 | 2026-11-14 | v2.2 | All projectiles fly through ProjectileManager, so its path test covers every projectile weapon. |
+| 2026-11-15 | v2.3 | Cost estimates and the flow-field plan moved here from design/enemy-navigation.md. |

@@ -6,6 +6,7 @@
 [ext_resource type="Resource" path="res://pickups/coins/coin_silver.tres" id="4_silver"]
 [ext_resource type="Resource" path="res://pickups/coins/coin_gold.tres" id="5_gold"]
 [ext_resource type="Resource" path="res://world_markers/kinds/barrel.tres" id="6_marker"]
+[ext_resource type="Script" path="res://pickups/LootTable.cs" id="7_table"]
 
 [sub_resource type="Resource" id="Loot_bronze"]
 script = ExtResource("2_loot")
@@ -24,6 +25,10 @@ script = ExtResource("2_loot")
 Pickup = ExtResource("5_gold")
 Chance = 0.05
 
+[sub_resource type="Resource" id="LootTable_barrel"]
+script = ExtResource("7_table")
+Drops = Array[Resource]([SubResource("Loot_bronze"), SubResource("Loot_silver"), SubResource("Loot_gold")])
+
 [resource]
 script = ExtResource("1_def")
 DisplayName = "Barrel"
@@ -34,4 +39,4 @@ Marker = ExtResource("6_marker")
 ModelPath = "res://local_assets/props/barrels/barrel.glb"
 Slices = 8
 DustFramesPath = "res://local_assets/effects/smoke/smoke.spritesheet"
-Loot = Array[Resource]([SubResource("Loot_bronze"), SubResource("Loot_silver"), SubResource("Loot_gold")])
+Loot = SubResource("LootTable_barrel")

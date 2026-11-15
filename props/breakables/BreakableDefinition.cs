@@ -47,8 +47,9 @@ public partial class BreakableDefinition : Resource
     [Export] public float DustPixelSize = 0.012f;
 
     [ExportGroup("Loot")]
-    // Each line is rolled on its own when it breaks.
-    [Export] public LootDrop[] Loot = System.Array.Empty<LootDrop>();
+    // What falls out when it breaks (rolled by PickupManager.DropLoot).
+    // Optional: without a table it drops nothing.
+    [Export] public LootTable Loot;
 
     // ---- Loaded or built on first use, then shared by every prop of this
     // kind. Not exported, so none of it is saved into the .tres. ----------

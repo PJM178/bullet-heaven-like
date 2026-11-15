@@ -346,21 +346,7 @@ public partial class BreakableManager : Node3D
 
         PuffDust(definition, centre);
 
-        if (PickupManager != null)
-        {
-            foreach (LootDrop line in definition.Loot)
-            {
-                int count = line?.Roll(_random) ?? 0;
-                for (int n = 0; n < count; n++)
-                {
-                    // A random point in a circle around the prop.
-                    float angle = _random.Randf() * Mathf.Tau;
-                    float distance = Mathf.Sqrt(_random.Randf()) * LootScatter;
-                    Vector3 offset = new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle)) * distance;
-                    PickupManager.Drop(line.Pickup, centre + offset);
-                }
-            }
-        }
+        PickupManager?.DropLoot(definition.Loot, centre, LootScatter);
     }
 
     private void ThrowPiece(MeshShatter.Piece piece, Transform3D propTransform)

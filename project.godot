@@ -11,9 +11,13 @@ config_version=5
 [application]
 
 config/name="Bullet Heaven Like"
-run/main_scene="res://game.tscn"
+run/main_scene="res://ui/title_menu.tscn"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+Profile="*res://meta/profile.tscn"
 
 [display]
 

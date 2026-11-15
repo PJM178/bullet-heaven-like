@@ -1,6 +1,6 @@
 # Minimap and world markers: architecture
 
-Status: v3, 2026-11-14. Minimap chosen over the compass bar; details still
+Status: v3.1, 2026-11-15. Minimap chosen over the compass bar; details still
 being tuned. How it works today is in [systems/minimap.md](../systems/minimap.md).
 
 ## Goal
@@ -22,16 +22,15 @@ what to go after.
    Hidden, Rumoured ("?" on the rim, direction only), Sensed (dim icon),
    Discovered (full icon, after being on screen once). States only ever go
    up. Ranges and starting state are per marker kind.
-4. **Markers are their own system (`WorldMarkers`), separate from the
-   display.** Game systems call `Add` / `Reveal` / `Remove` and never touch
-   the UI. The switch from compass bar to minimap changed only the UI.
-5. **One `WorldMarkerDefinition` .tres per kind of marker** (looks,
-   ranges), like pickups and breakables. A breakable can carry one in its
-   definition, and the marker goes away when the prop breaks.
+4. **Markers are their own system, separate from the display.** Game
+   systems add, reveal and remove markers and never touch the UI. The
+   switch from compass bar to minimap changed only the UI.
+5. **Each kind of marker is data** (looks, ranges), like pickups and
+   breakables. A breakable can carry one, and the marker goes away when
+   the prop breaks.
 6. **Minimap chosen over the compass bar** (2026-11-14). The compass bar
-   is kept but inert (`ui/CompassBar.cs`, hidden and disabled in
-   `player_hud.tscn`) until it's deleted. It is a fixed, screen-relative strip with a facing cursor that
-   names the marker it points at. 
+   (a fixed, screen-relative strip with a facing cursor that names the
+   marker it points at) is kept but inert until it's deleted.
 
 ## Open questions
 
@@ -54,3 +53,4 @@ what to go after.
 | 2026-11-14 | v1 | Fixed screen-relative compass bar with a facing cursor; reveal states; WorldMarkers separate from the UI. Prototype built. |
 | 2026-11-14 | v2 | Switched to a screen-aligned minimap in the top-right corner; compass bar kept inert for comparison. |
 | 2026-11-14 | v3 | Decided: minimap. |
+| 2026-11-15 | v3.1 | Class and file names left to the systems doc. |

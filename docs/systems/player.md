@@ -1,6 +1,6 @@
 # Player Character
 
-Status: v1.3, 2026-11-14. Documents the player **as built** in the prototype.
+Status: v1.4, 2026-11-15. Documents the player **as built** in the prototype.
 Nothing here is a proposal unless marked; planned changes belong in Open
 questions until they are decided.
 
@@ -104,10 +104,14 @@ Reaching 0 hearts ends the run with a sequence instead of a menu:
 | 0.8 s | The picture starts fading out through a chunky dither. |
 | 1.0 s | The game freezes; the camera keeps circling. |
 | 2.2 s | The title ("OVERRUN") dithers in as a rippling sign standing over the body. |
-| 4.0 s | Run summary: level reached and enemies slain. |
-| 4.8 s | Restart button. Last on purpose, so a finger still on the stick cannot skip the moment. |
+| 4.0 s | Run summary: level reached, enemies slain, coins collected. |
+| 4.8 s | Buttons: **Rise again** (new run) and **Menu** (title menu). Last on purpose, so a finger still on the stick cannot skip the moment. |
 
-There is no revive or continue: Restart begins a new run from level 1.
+A new tap or click from 0.6 s on (`GameOverScreen.SkipAfter`) fast-forwards the sequence to its end (`Tween.CustomStep`): world frozen and faded, title, summary and buttons shown. The rest of that tap is swallowed, so it cannot also press a button.
+
+The run's coins are banked into the Profile the moment the player dies (see
+[meta-progression.md](meta-progression.md)). There is no revive or continue:
+Rise again begins a new run from level 1.
 
 ## Look and animation
 
@@ -161,7 +165,7 @@ There is no revive or continue: Restart begins a new run from level 1.
 | Piece | Where | Role |
 | --- | --- | --- |
 | `Player` | `player/Player.cs`, node `Player` in `main.tscn` | Movement, facing, animation choice, hurt blink, death frames. |
-| `PlayerStats` | `player/PlayerStats.cs`, child node `Stats` | Hearts, invulnerability, XP and level, coins, pickup radii; `Collect` applies pickups. Signals: `HealthChanged`, `Died`, `LeveledUp`, `CoinsChanged`. |
+| `PlayerStats` | `player/PlayerStats.cs`, child node `Stats` | Hearts, invulnerability, XP and level, coins, pickup radii; `Collect` applies pickups, `ApplyUpgrade` meta upgrades. Signals: `HealthChanged`, `Died`, `LeveledUp`, `CoinsChanged`. |
 | `SkillManager` | `skills/`, child node `Skills` | Learned skills and level-up choices; starts with the Sword. |
 | `CameraFollow` | `player/CameraFollow.cs` | Follow, shake, death shot. |
 | `VirtualJoystick` | `ui/`, `MoveStick` and `AimStick` in `game.tscn` | Presses the `move_*` / `aim_*` actions with analog strength. |
@@ -190,10 +194,10 @@ Tunable values and their defaults:
 | `XpPerLevel` | 1000, 1500, 2200, 3000 | `PlayerStats` |
 | `ContactRange` / `ContactDamage` | 0.9 m / 1 | `EnemyManager` |
 | `XpPerKill` | 100 | `EnemyManager` |
-| `MagnetRadius` | 4 m | `PlayerStats` |
+| `MagnetRadius` | 4 m (+ Magnet upgrade) | `PlayerStats` |
 | `PickupRadius` | 0.6 m | `PlayerStats` |
 
-Debug: the stress-test HUD has **Die** and **Level up** buttons.
+Debug: the stress-test HUD has **Die** and **Level up** buttons (in a 3-column grid with the enemy count buttons).
 
 ## Changelog
 
@@ -203,3 +207,5 @@ Debug: the stress-test HUD has **Die** and **Level up** buttons.
 | 2026-11-14 | v1.1 | Camera 20% closer: 40 m to 32 m. Death shot keeps its 7.2 m end distance (DeathZoom 0.18 to 0.225). |
 | 2026-11-14 | v1.2 | Death shot: sprites show the side the circling camera sees, also while paused. |
 | 2026-11-14 | v1.3 | `MagnetRadius` moved from `XpManager` to `PlayerStats`; added `PickupRadius`, `Coins`, `Collect`. |
+| 2026-11-15 | v1.4 | Death banks the coins; Menu button beside Rise again; `PlayerStats.ApplyUpgrade` for meta upgrades. |
+| 2026-11-15 | v1.5 | Tap or click on the death screen fast-forwards to the buttons. |

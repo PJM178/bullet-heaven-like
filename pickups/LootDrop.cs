@@ -4,12 +4,12 @@ namespace BulletHeavenLike;
 
 /// <summary>
 /// One line of a loot table: "a Chance of dropping between MinCount and
-/// MaxCount of this pickup". Anything that drops loot (breakable props now,
-/// enemies or chests later) holds a list of these and rolls each line on
-/// its own, so one barrel can drop both bronze and silver coins.
+/// MaxCount of this pickup". A <see cref="LootTable"/> holds a list of
+/// these and each line is rolled on its own, so one barrel can drop both
+/// bronze and silver coins.
 ///
-/// Usually made inline inside the definition that owns it (a sub-resource
-/// in the same .tres), not as a file of its own.
+/// Usually made inline inside the table that owns it (a sub-resource in
+/// the same .tres), not as a file of its own.
 /// </summary>
 [GlobalClass]
 public partial class LootDrop : Resource

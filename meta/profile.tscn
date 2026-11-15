@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://meta/Profile.cs" id="1_profile"]
+[ext_resource type="Resource" path="res://meta/upgrades/magnet_radius.tres" id="2_magnet"]
+
+[node name="Profile" type="Node"]
+process_mode = 3
+script = ExtResource("1_profile")
+Upgrades = Array[Resource]([ExtResource("2_magnet")])

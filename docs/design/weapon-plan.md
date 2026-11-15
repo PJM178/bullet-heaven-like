@@ -1,6 +1,6 @@
 # Weapon Plan — Skills and Fusions
 
-Status: v1, 2026-11-14. A living design document: it records what is decided,
+Status: v1.1, 2026-11-15. A living design document: it records what is decided,
 marks proposals, and lists open questions.
 
 ## Overview
@@ -116,23 +116,14 @@ one starts.
 - [ ] Which classes exist, and how many class-specific skills does each get?
 - [ ] Can a fusion be an ingredient of another fusion (two tiers deep)?
 
-## Implementation notes
+## Implementation
 
-The design fits the existing skill system: fusions and class skills are mostly
-new data on `SkillDefinition` plus one filter in `SkillManager.RollChoices`.
-
-| Piece | Today | Change |
-| --- | --- | --- |
-| `SkillDefinition` (resource, one `.tres` per skill) | Name, description, icon, weapon node, weight, max level | Add `Requires` (skills that must be learned), `Replaces` (the base skill it upgrades), later `Classes` (who may be offered it). |
-| `SkillManager.RollChoices` | Offers any skill below max level | Also skip skills whose requirements are not met, or that belong to another class. |
-| `SkillManager.Learn` | Switches the skill's weapon node on | For a fusion, also switch the replaced base weapon off. |
-| Weapon folders | `weapons/sword/`, `weapons/hammer/`, `weapons/projectiles/` | New `weapons/kunai/`, `weapons/fireball/`, `weapons/exploding_kunai/`, each with its `_skill.tres`. |
-
-Each fusion stays its own weapon node and scene, so Exploding Kunai can reuse
-Kunai and Fireball code without either of them knowing about fusions.
+How the skill system is built today, and the code changes this plan needs:
+[systems/skills.md](../systems/skills.md).
 
 ## Changelog
 
 | Date | Version | Change |
 | --- | --- | --- |
 | 2026-11-14 | v1 | First weapon plan: skill kinds, fusion rules, Exploding Kunai, build steps. |
+| 2026-11-15 | v1.1 | Implementation notes moved to systems/skills.md. |

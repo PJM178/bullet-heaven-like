@@ -15,10 +15,17 @@ namespace BulletHeavenLike;
 ///          keep facing the camera as it circles, and the ripple makes
 ///          its letters warp across the sign's triangles
 ///   4.0 s  the run summary dithers in
-///   4.8 s  the Restart button appears
+///   4.8 s  the buttons appear: Rise again (a new run straight away)
+///          and Menu (the title menu, where the upgrades are)
 ///
-/// The button comes last on purpose, so a finger still on the joystick
-/// can't skip past the moment by accident.
+/// The buttons come last on purpose, so a finger still on the joystick
+/// can't skip past the moment by accident. A fresh tap or click (after
+/// SkipAfter seconds) fast-forwards the whole sequence to its end, with
+/// the title, summary and buttons all shown.
+///
+/// The run's coins are banked into the Profile the moment the player
+/// dies, so they are kept whichever button is pressed, or if the app is
+/// closed on this screen.
 ///
 /// Like the pause menu it runs with ProcessMode Always (set in
 /// game_over_screen.tscn) so it keeps working while paused, and sits on a
@@ -54,6 +61,16 @@ public partial class GameOverScreen : CanvasLayer
     [Export] public float SummaryDelay = 4.0f;
     [Export] public float ButtonDelay = 4.8f;
 
+    // Real seconds after death before a tap can fast-forward the sequence,
+    // so a tap that was already on its way at the moment of death doesn't
+    // skip the fall.
+    [Export] public float SkipAfter = 0.6f;
+
+    // Where the Menu button goes. A path rather than a PackedScene export:
+    // the title menu opens game.tscn, which holds this screen, and scenes
+    // that reference each other in a loop can't be loaded.
+    [Export(PropertyHint.File, "*.tscn")] public string MenuScenePath = "res://ui/title_menu.tscn";
+
     private ColorRect _fade;
     private ShaderMaterial _fadeMaterial;
     private Label _titleText;
@@ -63,7 +80,16 @@ public partial class GameOverScreen : CanvasLayer
     private Camera3D _signCamera;
     private Label _summary;
     private ShaderMaterial _summaryMaterial;
+    private Control _buttons;
     private Button _restartButton;
+    private Button _menuButton;
+
+    // The running death sequence; null or invalid once it has finished.
+    private Tween _sequence;
+
+    // True from the tap that skipped until that tap is lifted: see
+    // TrySkip for why the rest of that tap must be swallowed.
+    private bool _swallowTap;
 
     public override void _Ready()
     {
@@ -82,8 +108,11 @@ public partial class GameOverScreen : CanvasLayer
         GetNode<TextureRect>("%SignView").Texture = _signViewport.GetTexture();
         _summary = GetNode<Label>("%Summary");
         _summaryMaterial = (ShaderMaterial)_summary.Material;
+        _buttons = GetNode<Control>("%Buttons");
         _restartButton = GetNode<Button>("%RestartButton");
         _restartButton.Pressed += Restart;
+        _menuButton = GetNode<Button>("%MenuButton");
+        _menuButton.Pressed += GoToMenu;
         Hide();
 
         if (Stats != null)
@@ -109,7 +138,64 @@ public partial class GameOverScreen : CanvasLayer
         if (@event.IsActionPressed("pause"))
         {
             GetViewport().SetInputAsHandled();
+            return;
         }
+
+        TrySkip(@event);
+    }
+
+    /// <summary>
+    /// A tap or click while the sequence plays jumps it to its end.
+    ///
+    /// One tap arrives as several events: on the phone a ScreenTouch plus
+    /// a MouseButton copy that Godot makes from it (and on desktop the other
+    /// way round, see Project Settings > Input Devices > Pointing), each
+    /// with a press and a release. Skipping enables the buttons at once, so
+    /// if the rest of that tap got through, a tap that happened to land on
+    /// Rise again would skip *and* restart. So every pointer event is
+    /// swallowed until the tap is lifted.
+    /// </summary>
+    private void TrySkip(InputEvent @event)
+    {
+        // "is X name" checks the type and, if it matches, gives a variable
+        // of that type. Anything other than a touch or left click is ignored.
+        bool pressed;
+        if (@event is InputEventScreenTouch touch)
+        {
+            pressed = touch.Pressed;
+        }
+        else if (@event is InputEventMouseButton mouse && mouse.ButtonIndex == MouseButton.Left)
+        {
+            pressed = mouse.Pressed;
+        }
+        else
+        {
+            return;
+        }
+
+        if (_swallowTap)
+        {
+            GetViewport().SetInputAsHandled();
+            if (!pressed)
+            {
+                _swallowTap = false;
+            }
+            return;
+        }
+
+        // IsValid() turns false once a tween has finished.
+        bool playing = _sequence != null && _sequence.IsValid();
+        if (!pressed || !playing || _sequence.GetTotalElapsedTime() < SkipAfter)
+        {
+            return;
+        }
+
+        // CustomStep advances the tween by this many seconds right now,
+        // running every step and callback on the way (the freeze, the
+        // buttons switching on). Any number past the end will do.
+        _sequence.CustomStep(1000.0);
+        _swallowTap = true;
+        GetViewport().SetInputAsHandled();
     }
 
 
@@ -118,16 +204,19 @@ public partial class GameOverScreen : CanvasLayer
         // String building is fine here: it happens once per run.
         int kills = Enemies?.Kills ?? 0;
         _titleText.Text = TitleText;
-        _summary.Text = $"Level {Stats.Level}     {kills} slain";
+        _summary.Text = $"Level {Stats.Level}     {kills} slain\n+{Stats.Coins} coins";
+
+        // Every coin collected is kept (meta-progression.md).
+        Profile.Instance?.BankCoins(Stats.Coins);
 
         // Start everything invisible. The labels fade with their dither
-        // shaders; the button uses Modulate's alpha (A), which fades a
-        // control and its children together.
+        // shaders; the buttons use Modulate's alpha (A) on their row, which
+        // fades a control and its children together.
         _fadeMaterial.SetShaderParameter("amount", 0.0f);
         _titleMaterial.SetShaderParameter("reveal", 0.0f);
         _summaryMaterial.SetShaderParameter("reveal", 0.0f);
-        _restartButton.Modulate = Colors.Transparent;
-        _restartButton.Disabled = true;
+        _buttons.Modulate = Colors.Transparent;
+        SetButtonsDisabled(true);
         PlaceTitleSign();
         Show();
 
@@ -142,6 +231,7 @@ public partial class GameOverScreen : CanvasLayer
     private void PlaySequence()
     {
         Tween tween = CreateTween();
+        _sequence = tween;
         // Keep running while the game is paused...
         tween.SetPauseMode(Tween.TweenPauseMode.Process);
         // ...and count real seconds, not slowed-down game seconds.
@@ -177,9 +267,9 @@ public partial class GameOverScreen : CanvasLayer
             0.0f, 1.0f, 0.8f)
             .SetDelay(SummaryDelay);
 
-        tween.Parallel().TweenProperty(_restartButton, "modulate:a", 1.0f, 0.6f)
+        tween.Parallel().TweenProperty(_buttons, "modulate:a", 1.0f, 0.6f)
             .SetDelay(ButtonDelay);
-        tween.Parallel().TweenCallback(Callable.From(() => _restartButton.Disabled = false))
+        tween.Parallel().TweenCallback(Callable.From(() => SetButtonsDisabled(false)))
             .SetDelay(ButtonDelay);
     }
 
@@ -290,13 +380,32 @@ public partial class GameOverScreen : CanvasLayer
         Engine.TimeScale = 1.0;
     }
 
-    private void Restart()
+    private void SetButtonsDisabled(bool disabled)
     {
-        // The pause flag and Engine.TimeScale belong to the whole engine,
-        // not the scene, so they would survive the reload and freeze or
-        // slow down the new run.
+        _restartButton.Disabled = disabled;
+        _menuButton.Disabled = disabled;
+    }
+
+    /// <summary>
+    /// The pause flag and Engine.TimeScale belong to the whole engine, not
+    /// the scene, so they would survive a scene change and freeze or slow
+    /// down whatever comes next. Reset them before leaving.
+    /// </summary>
+    private void ResetEngineState()
+    {
         GetTree().Paused = false;
         Engine.TimeScale = 1.0;
+    }
+
+    private void GoToMenu()
+    {
+        ResetEngineState();
+        GetTree().ChangeSceneToFile(MenuScenePath);
+    }
+
+    private void Restart()
+    {
+        ResetEngineState();
         // Throws the whole running scene (game.tscn) away and loads it
         // fresh, which resets every enemy, orb, skill and stat at once.
         GetTree().ReloadCurrentScene();
