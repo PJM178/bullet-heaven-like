@@ -29,12 +29,21 @@ Status: not started. Part of [Reliable UDP](README.md).
 
 ## Build
 
-- Two console apps (or one with a `server` / `client` mode): the server
-  echoes whatever it receives, the client sends numbered messages and prints
-  the echoes with the round-trip time.
-- A minimal check from the phone: a tiny Godot scene sending one UDP packet
-  to the PC's echo server and showing the answer. Done this early to find out
-  whether .NET sockets work on Android under Godot before building on them.
+In small pieces, each done with the loop in [How we work](../README.md):
+
+| Piece | What |
+| --- | --- |
+| 1a | Receive one packet: socket, bind to a port, receive, print what came |
+| 1b | Send it back to the sender |
+| 1c | Loop: a real echo server, several senders at once |
+| 1d | A client: send one packet, wait for the answer |
+| 1e | Client without waiting: non-blocking, polling like a game loop |
+| 1f | Sequence number and send time written as bytes; measure round-trip time |
+| 1g | Packet sizes: what breaks, and where |
+| 1h | The phone: a tiny Godot scene talking to the PC's echo server |
+
+Code goes in `learning/reliable-udp/` (repo root). Test tool before our own
+client exists: `nc -u` (netcat).
 
 ## Test
 

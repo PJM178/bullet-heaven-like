@@ -1,9 +1,12 @@
 # Reliable UDP (learning project)
 
-Status: v0.1, 2026-11-22. **Not started.** A learning project: build a
+Status: v0.1, 2026-11-22. **Not started** (step 01 restarts from scratch). A learning project: build a
 reliable-UDP network transport from scratch, one step at a time, and end up
 with the transport the game uses. Each step has its own doc with what it
 teaches, what gets built, how it's tested and what we found.
+
+How every session runs (idea first, small pieces, run together): see
+[How we work](../README.md).
 
 ## Why
 
@@ -86,9 +89,10 @@ counterpart), **Build** (what gets written), **Test** (how, and done when),
 
 ## Open questions
 
-- [ ] Where the code lives: the experiments and console apps (steps 01-09)
-      apart from the game's code, with the finished transport moved to a
-      library the game references? Folder names to be decided at step 01.
+- [x] Where the code lives: `learning/reliable-udp/` at the repo root,
+      created piece by piece, in the root `BulletHeavenLike.slnx`. Whether
+      the finished transport moves next to the game's code: decided at
+      step 10.
 - [ ] Test framework: xUnit (the .NET default) or NUnit.
 - [ ] Encryption: none at first (co-op, relaxed trust); something once
       servers are public?

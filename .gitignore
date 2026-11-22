@@ -18,8 +18,10 @@
 /game/local_assets/
 CLAUDE.local.md
 
-# .NET build output of the server-side projects (the game's goes to .godot/)
+# .NET build output of the non-Godot projects (the game's goes to .godot/)
 /shared/**/bin/
 /shared/**/obj/
 /backend/**/bin/
 /backend/**/obj/
+/learning/**/bin/
+/learning/**/obj/

@@ -17,7 +17,8 @@ Four kinds of doc, kept apart:
 - **`learning/`**: learning projects: building something step by step to
   understand how it works underneath. One folder per project: a README.md
   (why, steps with status) plus one doc per step (learn, build, test,
-  findings). The outcome may become part of the game.
+  findings). The outcome may become part of the game. How sessions run
+  (idea first, small pieces): [learning/README.md](learning/README.md).
 
 Code paths in docs (`enemies/EnemyManager.cs`, ...) are relative to `game/`,
 the Godot project; server-side paths (`backend/...`, `deploy/...`) are
