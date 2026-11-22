@@ -7,7 +7,12 @@ level-up upgrades). **Android is the first target platform.**
 
 - **Godot 4.7.2 .NET** (C#). Editor binary:
   `~/Applications/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64`
-- **C# / .NET**: .NET SDK 10 is installed. `BulletHeavenLike.csproj` targets
+- **Repo layout**: a monorepo. The Godot project is `game/` (its root is
+  `game/project.godot`; all `res://` paths are relative to it). `docs/` and
+  `art/` sit beside it at the repo root. Server projects (`shared/`,
+  `backend/`, `deploy/`) will join them; see
+  `docs/research/multiplayer-architecture/stack.md`.
+- **C# / .NET**: .NET SDK 10 is installed. `game/BulletHeavenLike.csproj` targets
   `net8.0` (and `net9.0` for Android, which Godot requires).
 - Assembly and root namespace: `BulletHeavenLike`.
 - Renderer: **GL Compatibility** (widest Android device support).
@@ -18,6 +23,8 @@ level-up upgrades). **Android is the first target platform.**
 - Web export is not possible (C# projects can't export to Web).
 
 ## Commands
+
+Run from `game/` (the Godot project):
 
 ```bash
 dotnet build                                            # compile C# (fast check)
@@ -33,10 +40,12 @@ renaming or moving project files from outside it.
 
 ## Folder layout
 
-Files are grouped by **feature**, not by type: a script lives next to the
-scenes, models, shaders and materials it belongs to.
+Repo root: `game/` (the Godot project), `docs/`, `art/`, `.claude/`.
+Inside `game/`, files are grouped by **feature**, not by type: a script
+lives next to the scenes, models, shaders and materials it belongs to.
 
 ```
+game/
 game.tscn, main.tscn   a run (UI shell, and the 3D world); ui/title_menu.tscn starts the game
 core/                  shared by everything (base PS1 shader, hit flash,
                        WorldObstacles: walls/props that block movement and attacks)
@@ -55,9 +64,6 @@ world_markers/         WorldMarkers (points of interest, events) shown on the mi
 ui/                    title menu (main scene), layout, joystick, HUD
 props/                 level decoration; breakables/ (BreakableManager, definitions),
                        walk_in/ (WalkInSpace: cutaway with wall stubs for enterable spaces)
-art/                   Blender sources and generator scripts (.gdignore'd)
-docs/                  design/ (plans, decisions) and systems/ (as built);
-                       .gdignore'd, indexed in docs/README.md
 addons/sprite_kit/     .spritesheet importer -> SpriteFrames, DirectionalSprite3D /
                        SpriteDirections, KeyframeEffect (.str effect player)
 local_assets/          local sprites/effects/models used in-game (git-ignored, but
@@ -66,6 +72,13 @@ local_assets/          local sprites/effects/models used in-game (git-ignored, b
                        exteriors/, interiors/ (building blocks),
                        kit/<style>/ (modular walk-in building pieces),
                        buildings/<name>.tscn (assembled from the blocks)
+research/              local experiments and tests (git-excluded)
+
+(repo root)
+art/                   Blender sources and generator scripts
+docs/                  design/ (plans, decisions), systems/ (as built),
+                       research/ (exploration); indexed in docs/README.md.
+                       Code paths in docs are relative to game/.
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several
@@ -85,7 +98,7 @@ Open only the doc a task needs.
 
 ## Local assets
 
-`local_assets/` and `research/` are not committed, so committed scenes must
+`game/local_assets/` and `game/research/` are not committed, so committed scenes must
 not reference them directly: load by path if present (`FramesPath`,
 `core/OptionalScene.cs`). Where the assets come from and how to bake them is in
 `CLAUDE.local.md` (git-ignored).

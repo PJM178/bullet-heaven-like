@@ -15,6 +15,9 @@ Three kinds of doc, kept apart:
   into design/systems docs once decisions are made. A big topic gets a
   folder: a README.md overview plus one doc per subtopic.
 
+Code paths in docs (`enemies/EnemyManager.cs`, ...) are relative to `game/`,
+the Godot project.
+
 One doc per self-contained piece of the game (weapons, enemies, progression,
 ...), never one big doc. Each has a status line, open questions and a
 changelog. Read only the doc a task needs; update it when decisions change

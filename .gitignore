@@ -1,6 +1,6 @@
 # Godot 4+ specific ignores
 .godot/
-/android/
+/game/android/
 
 # Editor-specific settings
 .vscode/
@@ -15,5 +15,5 @@
 
 # Local sprite/effect assets used in-game. Godot imports and exports them,
 # but they stay out of the repo (see CLAUDE.local.md).
-/local_assets/
+/game/local_assets/
 CLAUDE.local.md

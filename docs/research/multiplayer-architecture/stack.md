@@ -1,6 +1,6 @@
 # Language and Repo Layout
 
-Status: v0.3, 2026-11-22. **Exploration**, part of the [multiplayer
+Status: v0.4, 2026-11-22. **Exploration**, part of the [multiplayer
 architecture research](README.md). Which language each server is written in,
 and where the projects live in the repo.
 
@@ -75,8 +75,10 @@ Details that come with B:
   structs; the game converts at the boundary), or the backend would need
   Godot to build.
 
-When: not before it is needed. Spike 1 runs entirely inside the Godot
-project. Move just before the first shared or backend code is written.
+Done 2026-11-22: the Godot project moved into `game/` (`docs/` and `art/`
+stay at the root). `shared/`, `backend/` and `deploy/` are added when the
+first server code is written. Godot keeps its own `game/BulletHeavenLike.sln`;
+a root solution for all projects comes with the backend.
 
 ## Backend and shared code: plain C# (decided 2026-11-22)
 
@@ -131,6 +133,7 @@ the simulation can stay in Godot. See [networking.md](networking.md).
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.4 | Repo move done: Godot project in `game/`. |
 | 2026-11-22 | v0.3 | Decided: game code stays on Godot types; core/shell split instead. Shared message vectors: plain floats proposed. |
 | 2026-11-22 | v0.2 | Decided: C# everywhere, monorepo (for now), backend and shared library plain C# (no Godot). Game simulation off Godot types: not worth it (checked against the code). |
 | 2026-11-22 | v0.1 | Split out of the single multiplayer-architecture.md (v0.3); content unchanged. |
