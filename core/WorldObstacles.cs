@@ -23,8 +23,11 @@ namespace BulletHeavenLike;
 /// Shapes are sorted into a coarse grid, so an enemy only looks at the few
 /// shapes near it. Later, a flow field for pathfinding can read the same
 /// shapes to know which ground is blocked.
+///
+/// Simulation cores (e.g. <see cref="EnemySimulation"/>) use it through
+/// <see cref="IObstacleQuery"/>, so they never depend on this node itself.
 /// </summary>
-public partial class WorldObstacles : Node
+public partial class WorldObstacles : Node, IObstacleQuery
 {
     /// <summary>The group this node is in, so blockers can find it.</summary>
     public const string Group = "world_obstacles";

@@ -4,13 +4,18 @@ using Godot;
 namespace BulletHeavenLike;
 
 /// <summary>
-/// Owns and updates every enemy in one place.
+/// The enemies in the scene: the "shell" around <see cref="EnemySimulation"/>.
 ///
-/// Instead of each enemy having its own script and physics body, this node
-/// keeps all enemy data in plain C# arrays and moves everything in a single
-/// loop. That is much cheaper with hundreds of enemies, and it means the
-/// way enemies are *drawn* (nodes today, maybe a MultiMesh later) can change
-/// without touching movement or game logic.
+/// The simulation (the "core") holds every enemy as plain data and does all
+/// the game logic: spawning, steering, walls, hits, deaths. This node owns
+/// one, calls it every physics tick, and turns what it says into things on
+/// screen: one pooled node per enemy, sprite directions, animation, the hit
+/// flash and death corpses. It also connects the core to the rest of the
+/// game (the player's position and health, XP drops). The core never knows
+/// this node exists, so a server that draws nothing can run the same logic.
+///
+/// Weapons keep using this node's query methods (QueryCircle, HitTest,
+/// Damage...), which pass straight through to the core.
 ///
 /// What each kind of enemy is like comes from its
 /// <see cref="EnemyDefinition"/> (<see cref="Kinds"/>). Every kind has its
@@ -32,17 +37,20 @@ public partial class EnemyManager : Node3D
     // The node enemies chase.
     [Export] public Node3D Target;
 
-    // How many enemies we want alive, of all kinds together. The manager
-    // spawns or removes a few per frame until it gets there. The
+    // ---- Simulation settings: copied into the core every step (see
+    // PushSettings), so they can still be changed while the game runs. ------
+
+    // How many enemies we want alive, of all kinds together. The core
+    // spawns or removes a few per step until it gets there. The
     // stress-test HUD changes this.
     [Export] public int TargetCount = 50;
 
-    // Spawning/removing is spread over frames to avoid one big hitch.
+    // Spawning/removing is spread over steps to avoid one big hitch.
     [Export] public int MaxSpawnsPerFrame = 10;
 
-    // Enemies spawn on a ring this far from the target (off screen), and any
+    // Enemies spawn on a ring this far from a player (off screen), and any
     // that fall further behind than DespawnDistance are moved back onto the
-    // ring, so the swarm always stays around the player.
+    // ring, so the swarm always stays around the players.
     [Export] public float SpawnDistance = 14.0f;
     [Export] public float DespawnDistance = 24.0f;
 
@@ -51,12 +59,14 @@ public partial class EnemyManager : Node3D
     [Export] public float SeparationRadius = 0.6f;
     [Export] public float SeparationStrength = 6.0f;
 
-    // Enemies stop pushing toward the target once they are this close (in
+    // Enemies stop pushing toward the player once they are this close (in
     // metres, measured centre to centre), and ease off over the
     // ArriveSlowdown metres before that. Without it the whole swarm keeps
     // shoving into the player and crushes into one tight ball.
     [Export] public float StopDistance = 0.7f;
     [Export] public float ArriveSlowdown = 1.0f;
+
+    // ---- Connections to the rest of the game. --------------------------------
 
     // Where killed enemies drop their experience. Without an XpManager,
     // kills just drop nothing.
@@ -66,6 +76,8 @@ public partial class EnemyManager : Node3D
     // enemies walk through everything. Each enemy's size against them is
     // its definition's BodyRadius.
     [Export] public WorldObstacles Obstacles;
+
+    // ---- Looks. ---------------------------------------------------------------
 
     // Stepped, PS1-style animation rate (see Player.AnimationFps).
     [Export] public float AnimationFps = 12.0f;
@@ -106,7 +118,7 @@ public partial class EnemyManager : Node3D
 
     /// <summary>
     /// One enemy's node and the parts of it we use, found once when the pool
-    /// is built. A class, so moving it between arrays just moves a reference.
+    /// is built.
     /// </summary>
     private sealed class EnemyBody
     {
@@ -118,22 +130,18 @@ public partial class EnemyManager : Node3D
         // Every mesh node in the enemy, so the flash can be set on all of
         // them (a model can be made of several meshes).
         public GeometryInstance3D[] Meshes;
+        // Seconds of hit flash left; 0 = not flashing.
+        public float FlashTime;
     }
 
     /// <summary>
-    /// Everything that belongs to one kind of enemy while the game runs:
-    /// its definition, its idle nodes, its flash material and its corpses.
+    /// The looks of one kind of enemy: its scene, flash material and corpses.
     /// </summary>
     private sealed class Kind
     {
         public EnemyDefinition Definition;
         public PackedScene Scene;      // Scene or FallbackScene, see ChooseScene
-        public float Weight;
         public Material FlashMaterial; // whichever flash fits the scene
-
-        // Idle nodes, used like a stack: the first FreeCount are free.
-        public EnemyBody[] Free;
-        public int FreeCount;
 
         // Corpses. Empty arrays when the kind has no death animation, so
         // nothing below needs a null check.
@@ -143,67 +151,41 @@ public partial class EnemyManager : Node3D
         public int NextCorpse;                             // next one to use, wraps around
     }
 
+    // The game logic. Null until _Ready (and if the manager is misconfigured).
+    private EnemySimulation _sim;
+
     private Kind[] _kinds = Array.Empty<Kind>();
 
-    // The largest HitRadius of any kind: how far around a point the hit
-    // queries have to look in the grid.
-    private float _maxHitRadius;
+    // One node per simulation slot (see EnemySimulation): the enemy in slot
+    // s is always drawn by _bodies[s]. Slots are numbered kind by kind, in
+    // the same order the pools are built here.
+    private EnemyBody[] _bodies = Array.Empty<EnemyBody>();
+
+    // What is handed to the core every step, made once and reused. One
+    // entry per player; there is only one player (Target) for now.
+    private readonly Vector3[] _playerPositions = new Vector3[1];
+    private readonly int[] _contactDamage = new int[1];
 
     // The camera, which decides which of a sprite's 8 directions shows.
-    // Looked up when first needed (see MoveEnemies).
+    // Looked up when first needed (see GetCamera).
     private Camera3D _camera;
 
-    // ---- Enemy data. Index i in every array is the same live enemy. Only
-    // the first _count entries are used; idle nodes wait in their kind's
-    // pool. ----------------------------------------------------------------
-    private Vector3[] _positions;
-    private Vector3[] _separation;          // per-frame push from neighbours
-    private float[] _health;
-    private bool[] _dead;                   // killed, removed next step
-    private float[] _flashTime;             // seconds of hit flash left
-    private int[] _kind;                    // index into _kinds
-    private EnemyBody[] _bodies;
-    private int _count;
-    // Room for every pool together.
-    private int _capacity;
-
-    // ---- Spatial grid (see BuildGrid). -----------------------------------
-    // The ground is divided into square cells. Each frame we sort enemies by
-    // cell, so an enemy only needs to check the enemies in the 3x3 cells
-    // around it rather than all of them. That turns an N*N cost into
-    // roughly N.
-    //
-    // Cells are mapped into a fixed-size table with a hash, so the grid
-    // needs no fixed world size and never allocates. Two far-apart cells can
-    // occasionally share a slot; that only costs a few extra distance checks.
-    private const int GridTableSize = 4096;  // a power of two, see CellSlot
-    private int[] _cellStart;    // where each slot's enemies begin in _cellEntries
-    private int[] _cellCount;    // how many enemies are in each slot
-    private int[] _cellEntries;  // enemy indices, grouped by slot
-    private int[] _enemySlot;    // which slot each enemy is in this frame
-
-    // A number unique to each enemy for its whole life, unlike its index
-    // (which changes when others are removed). Lets code remember "I already
-    // hit this one" across physics steps.
-    private int[] _ids;
-    private int _nextId;
-
     private double _animationTimeAccumulated;
-
-    // How many enemies are alive (read by the HUD).
-    public int Count => _count;
-
-    // The most enemies that can be alive at once: all pools together.
-    public int MaxEnemies => _capacity;
-
-    // How many enemies have been killed since the game started (read by
-    // the HUD). "{ get; private set; }" is an auto-property: anyone can
-    // read it, but only this class can change it.
-    public int Kills { get; private set; }
 
     // The Target's health and XP, found in _Ready. Null if the target has
     // no PlayerStats child, in which case enemies just don't hurt it.
     private PlayerStats _targetStats;
+
+    // How many enemies are alive (read by the HUD). "?." and "??": if _sim
+    // is null, use 0 instead of crashing.
+    public int Count => _sim?.Count ?? 0;
+
+    // The most enemies that can be alive at once: all pools together.
+    public int MaxEnemies => _sim?.Capacity ?? 0;
+
+    // How many enemies have been killed since the game started (read by
+    // the HUD).
+    public int Kills => _sim?.Kills ?? 0;
 
     public override void _EnterTree()
     {
@@ -226,40 +208,56 @@ public partial class EnemyManager : Node3D
         // safe even if the Player's own _Ready hasn't run yet.
         _targetStats = Target.GetNodeOrNull<PlayerStats>("Stats");
 
-        // Build every kind's pool, hidden. "new" in _Ready is fine; it's
-        // doing it every frame that we avoid.
+        // Build every kind's pool, hidden, and note how big each one is: the
+        // pool size is how many of that kind the core may have alive.
+        // "new" in _Ready is fine; it's doing it every frame that we avoid.
         _kinds = new Kind[Kinds.Length];
-        _capacity = 0;
+        int[] capacities = new int[Kinds.Length];
+        float[] weights = new float[Kinds.Length];
+        int total = 0;
         for (int k = 0; k < Kinds.Length; k++)
         {
-            _kinds[k] = BuildKind(Kinds[k], k < SpawnWeights.Length ? SpawnWeights[k] : 1.0f);
-            _capacity += _kinds[k].Free.Length;
-            if (Kinds[k] != null)
-                _maxHitRadius = Mathf.Max(_maxHitRadius, Kinds[k].HitRadius);
+            _kinds[k] = BuildKind(Kinds[k]);
+            capacities[k] = _kinds[k].Scene != null ? Math.Max(Kinds[k].PoolSize, 0) : 0;
+            weights[k] = k < SpawnWeights.Length ? SpawnWeights[k] : 1.0f;
+            total += capacities[k];
         }
 
-        // The live-enemy arrays, sized for every pool together.
-        _positions = new Vector3[_capacity];
-        _separation = new Vector3[_capacity];
-        _health = new float[_capacity];
-        _dead = new bool[_capacity];
-        _flashTime = new float[_capacity];
-        _kind = new int[_capacity];
-        _bodies = new EnemyBody[_capacity];
-        _enemySlot = new int[_capacity];
-        _ids = new int[_capacity];
-        _cellEntries = new int[_capacity];
-        _cellStart = new int[GridTableSize];
-        _cellCount = new int[GridTableSize];
+        // The nodes, one per slot, kind by kind in the same order as the
+        // capacities (which is how the core numbers its slots).
+        _bodies = new EnemyBody[total];
+        int slot = 0;
+        for (int k = 0; k < _kinds.Length; k++)
+        {
+            for (int n = 0; n < capacities[k]; n++)
+            {
+                EnemyBody body = MakeBody(_kinds[k].Scene);
+                if (body.Sprite != null && n == 0)
+                {
+                    // Every enemy of a kind is the same scene, so one flash
+                    // material made from the first one serves them all.
+                    _kinds[k].FlashMaterial = MakeSpriteMaterial(SpriteHitFlashShader, body.Sprite);
+                }
+                if (n == 0)
+                    BuildCorpses(_kinds[k], body.Sprite);
+                _bodies[slot] = body;
+                slot++;
+            }
+        }
+
+        // Kinds without a scene get capacity 0, so the core never spawns
+        // them. Obstacles is handed over as the IObstacleQuery interface:
+        // the core can ask it questions but never sees the node.
+        _sim = new EnemySimulation(Kinds, weights, capacities, Obstacles);
     }
 
     /// <summary>
-    /// Makes one kind's node pool and corpses. A kind with no definition or
-    /// scene gets an empty pool and never spawns.
+    /// Sets up one kind's looks. A kind with no definition or scene gets no
+    /// scene, so it has no pool and never spawns.
     /// </summary>
-    private Kind BuildKind(EnemyDefinition definition, float weight)
+    private Kind BuildKind(EnemyDefinition definition)
     {
-        var kind = new Kind { Definition = definition, Weight = weight, Free = Array.Empty<EnemyBody>() };
+        var kind = new Kind { Definition = definition };
         if (definition == null || definition.Scene == null)
         {
             GD.PushWarning($"EnemyManager: a kind has no definition or scene; it won't spawn.");
@@ -268,22 +266,6 @@ public partial class EnemyManager : Node3D
 
         kind.Scene = ChooseScene(definition);
         kind.FlashMaterial = HitFlashMaterial;
-        kind.Free = new EnemyBody[Math.Max(definition.PoolSize, 0)];
-        for (int n = 0; n < kind.Free.Length; n++)
-        {
-            EnemyBody body = MakeBody(kind.Scene);
-            if (body.Sprite != null && n == 0)
-            {
-                // Every enemy of a kind is the same scene, so one flash
-                // material made from the first one serves them all.
-                kind.FlashMaterial = MakeSpriteMaterial(SpriteHitFlashShader, body.Sprite);
-            }
-            kind.Free[n] = body;
-        }
-        kind.FreeCount = kind.Free.Length;
-
-        if (kind.Free.Length > 0)
-            BuildCorpses(kind, kind.Free[0].Sprite);
         return kind;
     }
 
@@ -348,13 +330,304 @@ public partial class EnemyManager : Node3D
         }
     }
 
+    public override void _PhysicsProcess(double delta)
+    {
+        PushSettings();
+
+        // Godot -> core: where the players are. Only one for now.
+        _playerPositions[0] = Target.GlobalPosition;
+
+        _sim.Step((float)delta, _playerPositions, _contactDamage);
+
+        // Core -> Godot. Removed before spawned: a slot freed this step can
+        // be reused at once, and its node must end up shown, not hidden.
+        HideRemoved();
+        ShowSpawned();
+        PlaceBodies();
+
+        // One touch is enough to cost a heart. TakeDamage ignores it while
+        // the player is still invulnerable from the previous hit, so it is
+        // fine to call it every step something is touching.
+        if (_contactDamage[0] > 0 && _targetStats != null)
+        {
+            _targetStats.TakeDamage(_contactDamage[0]);
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        // Visual-only updates live in _Process (every rendered frame)
+        // rather than _PhysicsProcess, so they look smooth at any frame rate.
+        UpdateHitFlash((float)delta);
+        UpdateCorpses((float)delta);
+        AdvanceAnimations(delta);
+    }
+
+    /// <summary>
+    /// Copies the [Export] settings into the core. A handful of
+    /// assignments per step, and it means editing them while the game runs
+    /// (the editor's remote inspector, the stress-test HUD) still works.
+    /// </summary>
+    private void PushSettings()
+    {
+        _sim.TargetCount = TargetCount;
+        _sim.MaxSpawnsPerFrame = MaxSpawnsPerFrame;
+        _sim.SpawnDistance = SpawnDistance;
+        _sim.DespawnDistance = DespawnDistance;
+        _sim.SeparationRadius = SeparationRadius;
+        _sim.SeparationStrength = SeparationStrength;
+        _sim.StopDistance = StopDistance;
+        _sim.ArriveSlowdown = ArriveSlowdown;
+    }
+
+    // ---- Core -> nodes ----------------------------------------------------------
+
+    /// <summary>
+    /// Hides the nodes of enemies the core removed this step, ending any
+    /// flash still going so the node is back to its normal look when reused.
+    /// </summary>
+    private void HideRemoved()
+    {
+        // ReadOnlySpan works like a read-only array here; see EnemySimulation.
+        ReadOnlySpan<int> removed = _sim.RemovedSlots;
+        for (int n = 0; n < removed.Length; n++)
+        {
+            EnemyBody body = _bodies[removed[n]];
+            body.Node.Visible = false;
+            if (body.FlashTime > 0.0f)
+            {
+                body.FlashTime = 0.0f;
+                SetHitFlash(body, null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the nodes of enemies the core spawned this step and starts
+    /// their animation at a random point in its cycle, so they don't all
+    /// hop in perfect unison.
+    /// </summary>
+    private void ShowSpawned()
+    {
+        ReadOnlySpan<int> spawned = _sim.Spawned;
+        for (int n = 0; n < spawned.Length; n++)
+        {
+            int i = spawned[n];
+            EnemyBody body = _bodies[_sim.GetSlot(i)];
+            body.Node.Visible = true;
+
+            DirectionalSprite3D sprite = body.Sprite;
+            if (sprite != null)
+            {
+                Camera3D camera = GetCamera();
+                if (camera != null && sprite.SpriteFrames != null)
+                {
+                    sprite.PlayFacing(WalkAnimation, _sim.Headings[i], camera);
+                    int frameCount = sprite.SpriteFrames.GetFrameCount(sprite.Animation);
+                    sprite.Frame = Random.Shared.Next(frameCount);
+                }
+                continue;
+            }
+
+            AnimationPlayer animationPlayer = body.AnimationPlayer;
+            if (animationPlayer != null)
+            {
+                animationPlayer.Play(MoveAnimation);
+                // Random.Shared is .NET's ready-made random generator, so we
+                // don't need to create (allocate) our own. (We read the
+                // length from the clip itself: in Manual mode, Play() hasn't
+                // fully started the animation yet, so CurrentAnimationLength
+                // would still be 0.) This randomness is only for looks, so
+                // it doesn't use the core's random generator.
+                double length = animationPlayer.GetAnimation(MoveAnimation).Length;
+                animationPlayer.Seek(Random.Shared.NextDouble() * length, true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Moves every live enemy's node to where the core says it is, facing
+    /// the way it moves.
+    /// </summary>
+    private void PlaceBodies()
+    {
+        Camera3D camera = GetCamera();
+        ReadOnlySpan<Vector3> positions = _sim.Positions;
+        ReadOnlySpan<Vector3> velocities = _sim.Velocities;
+        ReadOnlySpan<Vector3> headings = _sim.Headings;
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            EnemyBody body = _bodies[_sim.GetSlot(i)];
+
+            // Face the direction of travel (the model's front is +Z, see
+            // Player.FaceDirection). Building the whole transform and
+            // setting it once is one call into the engine instead of two.
+            float yaw = Mathf.Atan2(velocities[i].X, velocities[i].Z);
+            body.Node.Transform = new Transform3D(new Basis(Vector3.Up, yaw), positions[i]);
+
+            // A sprite is a billboard, so turning the node doesn't show; it
+            // picks which drawn direction to show instead. It faces the
+            // player rather than its exact velocity, because the crowd's
+            // pushing makes velocity jitter, and the sprite would flicker
+            // between directions. PlayFacing does nothing if neither the
+            // animation nor the direction changed, so this is cheap.
+            DirectionalSprite3D sprite = body.Sprite;
+            if (sprite != null && camera != null)
+            {
+                sprite.PlayFacing(WalkAnimation, headings[i], camera);
+            }
+        }
+    }
+
+    // ---- Hits -------------------------------------------------------------------
+
+    /// <summary>
+    /// Deals damage to enemy i (an index from a query, used in the same
+    /// physics step). The core decides what happens; this adds the looks
+    /// (flash, corpse) and the XP drop.
+    /// </summary>
+    public void Damage(int i, float amount)
+    {
+        EnemySimulation.DamageResult result = _sim.Damage(i, amount);
+        if (result == EnemySimulation.DamageResult.None)
+        {
+            return;
+        }
+
+        EnemyBody body = _bodies[_sim.GetSlot(i)];
+
+        // Start (or restart) the white flash; UpdateHitFlash ends it. Only
+        // swap the material if it isn't already flashing.
+        if (HitFlashMaterial != null && HitFlashDuration > 0.0f)
+        {
+            if (body.FlashTime <= 0.0f)
+            {
+                SetHitFlash(body, _kinds[_sim.GetKind(i)].FlashMaterial);
+            }
+            body.FlashTime = HitFlashDuration;
+        }
+
+        if (result == EnemySimulation.DamageResult.Killed)
+        {
+            // Hide it now so it vanishes on the frame it was killed; the core
+            // removes it at the start of the next step. A corpse takes its
+            // place for the death animation (sprite enemies only; others
+            // just vanish).
+            body.Node.Visible = false;
+            StartCorpse(i, body);
+
+            // "?." calls Drop only if XpManager is set (not null).
+            XpManager?.Drop(_sim.GetPosition(i), _sim.GetDefinition(i).XpPerKill);
+        }
+    }
+
+    // ---- Queries for weapons: straight through to the core. "=>" makes a
+    // method whose whole body is that one expression. See EnemySimulation
+    // for what each one does. ------------------------------------------------------
+
+    public float GetHitRadius(int i) => _sim.GetHitRadius(i);
+    public bool CanReach(Vector3 from, int i) => _sim.CanReach(from, i);
+    public Vector3 GetPosition(int i) => _sim.GetPosition(i);
+    public int GetId(int i) => _sim.GetId(i);
+    public int QueryCircle(Vector3 point, float radius, int[] results) => _sim.QueryCircle(point, radius, results);
+    public int QueryRing(Vector3 point, float innerRadius, float outerRadius, int[] results)
+        => _sim.QueryRing(point, innerRadius, outerRadius, results);
+    public int FindClosest(Vector3 point, float maxRange) => _sim.FindClosest(point, maxRange);
+    public int FindClosest(Vector3 point, float maxRange, int[] results) => _sim.FindClosest(point, maxRange, results);
+    public int HitTest(Vector3 point, float radius) => _sim.HitTest(point, radius);
+
+    // ---- Looks ------------------------------------------------------------------
+
+    /// <summary>
+    /// Counts down the hit flash on enemies that were hit recently and
+    /// ends it when the time runs out. Enemies that aren't flashing are
+    /// skipped after one comparison, so a swarm that isn't being hit costs
+    /// almost nothing here.
+    /// </summary>
+    private void UpdateHitFlash(float delta)
+    {
+        int count = Count;
+        for (int i = 0; i < count; i++)
+        {
+            EnemyBody body = _bodies[_sim.GetSlot(i)];
+            if (body.FlashTime <= 0.0f)
+            {
+                continue;
+            }
+
+            body.FlashTime -= delta;
+            if (body.FlashTime <= 0.0f)
+            {
+                body.FlashTime = 0.0f;
+                SetHitFlash(body, null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets the flash material on all of an enemy's meshes (null = off).
+    ///
+    /// MaterialOverride replaces the mesh's own material(s) while it is set;
+    /// setting it back to null brings the normal look back. Swapping in one
+    /// shared material works for any number of enemies. (We first tried a
+    /// per-mesh "instance uniform", but phones like the Adreno 642L only
+    /// have room for about 256 of those in the whole game.)
+    /// </summary>
+    private static void SetHitFlash(EnemyBody body, Material material)
+    {
+        GeometryInstance3D[] meshes = body.Meshes;
+        for (int m = 0; m < meshes.Length; m++)
+        {
+            meshes[m].MaterialOverride = material;
+        }
+    }
+
+    private void AdvanceAnimations(double delta)
+    {
+        // Same stepped animation idea as Player._Process, but one clock
+        // drives every enemy, so they all update on the same beat.
+        // Sprite enemies animate by themselves: their frames are already
+        // drawn at a low rate, so they look stepped without our help, and
+        // have no AnimationPlayer (null) to advance.
+        int count = Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        if (AnimationFps <= 0.0f)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                _bodies[_sim.GetSlot(i)].AnimationPlayer?.Advance(delta);
+            }
+            return;
+        }
+
+        _animationTimeAccumulated += delta;
+        double step = 1.0 / AnimationFps;
+        if (_animationTimeAccumulated < step)
+        {
+            return;
+        }
+
+        int steps = (int)(_animationTimeAccumulated / step);
+        double advance = steps * step;
+        _animationTimeAccumulated -= advance;
+        for (int i = 0; i < count; i++)
+        {
+            _bodies[_sim.GetSlot(i)].AnimationPlayer?.Advance(advance);
+        }
+    }
+
     /// <summary>
     /// Puts a corpse where enemy i is standing and starts its death
     /// animation, facing the same way the enemy did.
     /// </summary>
-    private void StartCorpse(int i)
+    private void StartCorpse(int i, EnemyBody body)
     {
-        Kind kind = _kinds[_kind[i]];
+        Kind kind = _kinds[_sim.GetKind(i)];
         Camera3D camera = GetCamera();
         if (kind.Corpses.Length == 0 || camera == null)
         {
@@ -367,7 +640,7 @@ public partial class EnemyManager : Node3D
 
         Node3D node = kind.Corpses[c];
         DirectionalSprite3D sprite = kind.CorpseSprites[c];
-        node.Transform = _bodies[i].Node.Transform;
+        node.Transform = body.Node.Transform;
         node.Visible = true;
         // Fully there again (a reused corpse may have been mid-fade).
         sprite.Modulate = Colors.White;
@@ -376,7 +649,7 @@ public partial class EnemyManager : Node3D
         // the same direction, and that run has already finished. So rewind
         // to the first frame and start it explicitly. Play() with no name
         // plays the current animation.
-        sprite.PlayFacing(DieAnimation, Target.GlobalPosition - _positions[i], camera);
+        sprite.PlayFacing(DieAnimation, _sim.Headings[i], camera);
         sprite.Frame = 0;
         sprite.Play();
 
@@ -421,6 +694,18 @@ public partial class EnemyManager : Node3D
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The active 3D camera, looked up once. Not in _Ready, because the
+    /// camera may not have become the current one yet when this node is
+    /// ready. Returns null if there's no camera.
+    /// </summary>
+    private Camera3D GetCamera()
+    {
+        // "??=" assigns only if the left side is still null.
+        _camera ??= GetViewport().GetCamera3D();
+        return _camera;
     }
 
     /// <summary>
@@ -496,834 +781,5 @@ public partial class EnemyManager : Node3D
             meshes[m] = (GeometryInstance3D)found[m];
         }
         return meshes;
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        // Enemies killed during the previous step are removed first, while
-        // nothing else is looking at the arrays (see Damage).
-        RemoveDead();
-        UpdatePopulation();
-        if (_count == 0)
-        {
-            return;
-        }
-
-        BuildGrid();
-        ComputeSeparation();
-        MoveEnemies((float)delta);
-
-        // Rebuild the grid from the positions enemies have just moved to,
-        // so HitTest (called by ProjectileManager later in this same step)
-        // looks in the right cells. Building it is cheap: two passes over
-        // the enemies plus one over the table.
-        BuildGrid();
-    }
-
-    public override void _Process(double delta)
-    {
-        // Visual-only updates live in _Process (every rendered frame)
-        // rather than _PhysicsProcess, so they look smooth at any frame rate.
-        UpdateHitFlash((float)delta);
-        UpdateCorpses((float)delta);
-        AdvanceAnimations(delta);
-    }
-
-    /// <summary>
-    /// Counts down the hit flash on enemies that were hit recently and
-    /// ends it when the time runs out. Enemies that aren't flashing are
-    /// skipped after one comparison, so a swarm that isn't being hit costs
-    /// almost nothing here.
-    /// </summary>
-    private void UpdateHitFlash(float delta)
-    {
-        for (int i = 0; i < _count; i++)
-        {
-            if (_flashTime[i] <= 0.0f)
-            {
-                continue;
-            }
-
-            _flashTime[i] -= delta;
-            if (_flashTime[i] <= 0.0f)
-            {
-                _flashTime[i] = 0.0f;
-                SetHitFlash(i, false);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Turns the white flash on or off for all of enemy i's meshes.
-    ///
-    /// MaterialOverride replaces the mesh's own material(s) while it is set;
-    /// setting it back to null brings the normal look back. Swapping in one
-    /// shared material works for any number of enemies. (We first tried a
-    /// per-mesh "instance uniform", but phones like the Adreno 642L only
-    /// have room for about 256 of those in the whole game.)
-    /// </summary>
-    private void SetHitFlash(int i, bool on)
-    {
-        Material material = on ? _kinds[_kind[i]].FlashMaterial : null;
-        GeometryInstance3D[] meshes = _bodies[i].Meshes;
-        for (int m = 0; m < meshes.Length; m++)
-        {
-            meshes[m].MaterialOverride = material;
-        }
-    }
-
-    private void AdvanceAnimations(double delta)
-    {
-        // Same stepped animation idea as Player._Process, but one clock
-        // drives every enemy, so they all update on the same beat.
-        // Sprite enemies animate by themselves: their frames are already
-        // drawn at a low rate, so they look stepped without our help, and
-        // have no AnimationPlayer (null) to advance.
-        if (_count == 0)
-        {
-            return;
-        }
-
-        if (AnimationFps <= 0.0f)
-        {
-            for (int i = 0; i < _count; i++)
-            {
-                _bodies[i].AnimationPlayer?.Advance(delta);
-            }
-            return;
-        }
-
-        _animationTimeAccumulated += delta;
-        double step = 1.0 / AnimationFps;
-        if (_animationTimeAccumulated < step)
-        {
-            return;
-        }
-
-        int steps = (int)(_animationTimeAccumulated / step);
-        double advance = steps * step;
-        _animationTimeAccumulated -= advance;
-        for (int i = 0; i < _count; i++)
-        {
-            _bodies[i].AnimationPlayer?.Advance(advance);
-        }
-    }
-
-    /// <summary>
-    /// Spawns or removes a few enemies to approach TargetCount.
-    /// </summary>
-    private void UpdatePopulation()
-    {
-        // Math.Clamp keeps the value inside [min, max].
-        int wanted = Math.Clamp(TargetCount, 0, MaxEnemies);
-
-        for (int n = 0; n < MaxSpawnsPerFrame && _count < wanted; n++)
-        {
-            if (!Spawn())
-            {
-                break; // every pool is empty
-            }
-        }
-        for (int n = 0; n < MaxSpawnsPerFrame && _count > wanted; n++)
-        {
-            Despawn(_count - 1);
-        }
-    }
-
-    /// <summary>
-    /// Picks a kind by SpawnWeights among those with idle nodes left.
-    /// Returns its index, or -1 when every pool is empty.
-    /// </summary>
-    private int PickKind()
-    {
-        float total = 0.0f;
-        for (int k = 0; k < _kinds.Length; k++)
-        {
-            if (_kinds[k].FreeCount > 0)
-                total += Mathf.Max(_kinds[k].Weight, 0.0f);
-        }
-        if (total <= 0.0f)
-            return -1;
-
-        // A random point along the weights laid end to end; the kind whose
-        // stretch it lands in wins.
-        float roll = Random.Shared.NextSingle() * total;
-        int last = -1;
-        for (int k = 0; k < _kinds.Length; k++)
-        {
-            if (_kinds[k].FreeCount == 0 || _kinds[k].Weight <= 0.0f)
-                continue;
-            last = k;
-            roll -= _kinds[k].Weight;
-            if (roll < 0.0f)
-                return k;
-        }
-        return last; // rounding left a sliver at the end
-    }
-
-    /// <summary>
-    /// Takes an idle node of a picked kind and places a new enemy on the
-    /// spawn ring. Returns false when every pool is empty.
-    /// </summary>
-    private bool Spawn()
-    {
-        int k = PickKind();
-        if (k < 0)
-        {
-            return false;
-        }
-        Kind kind = _kinds[k];
-        EnemyDefinition definition = kind.Definition;
-
-        // Pop the top of the kind's stack of idle nodes.
-        kind.FreeCount--;
-        EnemyBody body = kind.Free[kind.FreeCount];
-
-        int i = _count;
-        _count++;
-        _bodies[i] = body;
-        _kind[i] = k;
-        _positions[i] = RandomPointOnSpawnRing();
-        _health[i] = definition.MaxHealth;
-        _dead[i] = false;
-        _flashTime[i] = 0.0f;
-        _ids[i] = _nextId;
-        _nextId++;
-        body.Node.Visible = true;
-
-        // Start each enemy at a random point in its cycle so they don't all
-        // hop in perfect unison.
-        DirectionalSprite3D sprite = body.Sprite;
-        if (sprite != null)
-        {
-            Camera3D camera = GetCamera();
-            if (camera != null && sprite.SpriteFrames != null)
-            {
-                sprite.PlayFacing(WalkAnimation, Target.GlobalPosition - _positions[i], camera);
-                int frameCount = sprite.SpriteFrames.GetFrameCount(sprite.Animation);
-                sprite.Frame = Random.Shared.Next(frameCount);
-            }
-            return true;
-        }
-
-        AnimationPlayer animationPlayer = body.AnimationPlayer;
-        if (animationPlayer != null)
-        {
-            animationPlayer.Play(MoveAnimation);
-            // Random.Shared is .NET's ready-made random generator, so we
-            // don't need to create (allocate) our own. (We read the length
-            // from the clip itself: in Manual mode, Play() hasn't fully
-            // started the animation yet, so CurrentAnimationLength would
-            // still be 0.)
-            double length = animationPlayer.GetAnimation(MoveAnimation).Length;
-            animationPlayer.Seek(Random.Shared.NextDouble() * length, true);
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// How big live enemy i is for hits, in metres on the ground (its
-    /// definition's HitRadius). Only valid during the current physics step.
-    /// </summary>
-    public float GetHitRadius(int i) => _kinds[_kind[i]].Definition.HitRadius;
-
-    /// <summary>
-    /// Whether an attack from <paramref name="from"/> can reach live enemy i:
-    /// no wall (an obstacle that blocks attacks) on the straight line between
-    /// them. The hit queries (QueryCircle, QueryRing, HitTest) and FindClosest
-    /// already apply it; call it directly only for a line they don't cover.
-    /// Always true without Obstacles.
-    /// </summary>
-    public bool CanReach(Vector3 from, int i)
-    {
-        return Obstacles == null || !Obstacles.IsLineBlocked(from, _positions[i]);
-    }
-
-    /// <summary>
-    /// Ground position of live enemy i. Like every enemy index, only valid
-    /// during the current physics step.
-    /// </summary>
-    public Vector3 GetPosition(int i) => _positions[i];
-
-    /// <summary>
-    /// The lifelong ID of live enemy i. Unlike the index it stays the same
-    /// across physics steps, so it can be stored. No two enemies ever share
-    /// one (it would take billions of spawns to wrap around).
-    /// </summary>
-    public int GetId(int i) => _ids[i];
-
-    /// <summary>
-    /// Finds every live enemy overlapping the circle at point with the given
-    /// radius (on the ground, height ignored) and writes their indices into
-    /// results. Returns how many it found, at most results.Length.
-    ///
-    /// Enemies behind a wall as seen from point are left out (see CanReach),
-    /// so every area attack built on these queries is stopped by walls
-    /// without having to check itself.
-    ///
-    /// The caller owns the results array and reuses it every call, so a
-    /// query allocates nothing. Indices are only valid during the current
-    /// physics step, so use them right away.
-    /// </summary>
-    public int QueryCircle(Vector3 point, float radius, int[] results)
-    {
-        // A circle is a ring with no hole in the middle.
-        return QueryRing(point, 0.0f, radius, results);
-    }
-
-    /// <summary>
-    /// Like QueryCircle, but leaves out enemies that already overlapped the
-    /// smaller circle of innerRadius. Used by an expanding wave: each step
-    /// it asks only for the enemies its edge has newly reached, so it hits
-    /// each one once and a crowd inside it can't fill up the results.
-    /// </summary>
-    public int QueryRing(Vector3 point, float innerRadius, float outerRadius, int[] results)
-    {
-        int found = 0;
-        // Look as far out as the biggest enemy could reach in from.
-        int cellRange = Mathf.CeilToInt((outerRadius + _maxHitRadius) / SeparationRadius);
-        int cellX = CellCoord(point.X);
-        int cellZ = CellCoord(point.Z);
-
-        for (int dz = -cellRange; dz <= cellRange; dz++)
-        {
-            for (int dx = -cellRange; dx <= cellRange; dx++)
-            {
-                int slot = CellSlot(cellX + dx, cellZ + dz);
-                int start = _cellStart[slot];
-                int end = start + _cellCount[slot];
-
-                for (int e = start; e < end; e++)
-                {
-                    int j = _cellEntries[e];
-                    if (_dead[j])
-                    {
-                        continue;
-                    }
-
-                    // Each kind has its own size, so the reach is worked
-                    // out per enemy.
-                    float hitRadius = _kinds[_kind[j]].Definition.HitRadius;
-                    float reach = outerRadius + hitRadius;
-                    // Enemies closer than this were already touching the
-                    // inner circle. With no hole (innerRadius 0) nothing is
-                    // excluded.
-                    float innerReach = innerRadius > 0.0f ? innerRadius + hitRadius : 0.0f;
-                    float offsetX = _positions[j].X - point.X;
-                    float offsetZ = _positions[j].Z - point.Z;
-                    float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-                    if (distanceSquared >= reach * reach || distanceSquared < innerReach * innerReach)
-                    {
-                        continue;
-                    }
-
-                    // Behind a wall from the query's centre. Tested after the
-                    // distance, so only enemies actually caught pay for it.
-                    if (!CanReach(point, j))
-                    {
-                        continue;
-                    }
-
-                    // Two far-apart cells can share a slot in the hash table
-                    // (see CellSlot), so a wide search can visit the same
-                    // slot twice and meet the same enemy again. Skip repeats.
-                    // The list is short, so a plain search is fine.
-                    if (Array.IndexOf(results, j, 0, found) >= 0)
-                    {
-                        continue;
-                    }
-
-                    results[found] = j;
-                    found++;
-                    if (found == results.Length)
-                    {
-                        return found; // buffer full
-                    }
-                }
-            }
-        }
-
-        return found;
-    }
-
-    /// <summary>
-    /// Returns the index of the live enemy closest to point (on the ground,
-    /// height ignored) that is no further than maxRange and can be seen from
-    /// point (no wall in between, see CanReach), or -1 if none is. Like
-    /// every enemy index, only valid during the current physics step.
-    ///
-    /// A plain loop over every enemy: a few hundred distance checks are
-    /// cheap, and unlike the grid it works at any range. The wall check is
-    /// dearer, so it only runs for an enemy that would beat the best so far.
-    /// </summary>
-    public int FindClosest(Vector3 point, float maxRange)
-    {
-        int closest = -1;
-        // Compare squared distances: same order as real distances, without
-        // a square root per enemy.
-        float bestSquared = maxRange * maxRange;
-
-        for (int i = 0; i < _count; i++)
-        {
-            if (_dead[i])
-            {
-                continue;
-            }
-
-            float offsetX = _positions[i].X - point.X;
-            float offsetZ = _positions[i].Z - point.Z;
-            float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-            if (distanceSquared < bestSquared && CanReach(point, i))
-            {
-                bestSquared = distanceSquared;
-                closest = i;
-            }
-        }
-
-        return closest;
-    }
-
-    /// <summary>
-    /// Finds the live enemies closest to point (on the ground) within
-    /// maxRange, up to results.Length of them, and writes their indices into
-    /// results nearest first. Returns how many it found. Like the other
-    /// queries, the caller reuses its own results array, so nothing is
-    /// allocated.
-    ///
-    /// It keeps a small sorted list while looping over every enemy: a new
-    /// enemy that beats the furthest one kept is slid into its place. Cheap
-    /// for a handful of results (a weapon's projectile count).
-    /// </summary>
-    public int FindClosest(Vector3 point, float maxRange, int[] results)
-    {
-        int found = 0;
-        float maxSquared = maxRange * maxRange;
-        // Squared distance of each enemy in results, in the same order.
-        // stackalloc puts a small array on the stack instead of the heap,
-        // so it's free to make and needs no garbage collection. Span<T> is
-        // the array-like view of it.
-        Span<float> distances = stackalloc float[Mathf.Min(results.Length, 64)];
-        int capacity = distances.Length;
-        if (capacity == 0)
-        {
-            return 0;
-        }
-
-        for (int i = 0; i < _count; i++)
-        {
-            if (_dead[i])
-            {
-                continue;
-            }
-
-            float offsetX = _positions[i].X - point.X;
-            float offsetZ = _positions[i].Z - point.Z;
-            float distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-            if (distanceSquared >= maxSquared)
-            {
-                continue;
-            }
-            // List full and this one is no closer than the furthest kept.
-            if (found == capacity && distanceSquared >= distances[found - 1])
-            {
-                continue;
-            }
-            // Behind a wall: can't be aimed at.
-            if (!CanReach(point, i))
-            {
-                continue;
-            }
-
-            // Shift the further ones down one slot (dropping the last when
-            // full) until the new enemy's place is reached.
-            int slot = found < capacity ? found++ : found - 1;
-            while (slot > 0 && distances[slot - 1] > distanceSquared)
-            {
-                distances[slot] = distances[slot - 1];
-                results[slot] = results[slot - 1];
-                slot--;
-            }
-            distances[slot] = distanceSquared;
-            results[slot] = i;
-        }
-
-        return found;
-    }
-
-    /// <summary>
-    /// Returns the index of a live enemy overlapping the circle at point with
-    /// the given radius (measured on the ground, height is ignored), or -1
-    /// if there is none. Enemies behind a wall from point don't count.
-    /// Only valid during the current physics step: enemy indices change
-    /// when enemies are removed.
-    /// </summary>
-    public int HitTest(Vector3 point, float radius)
-    {
-        if (_count == 0)
-        {
-            return -1;
-        }
-
-        // How many cells out from the point's cell we have to look. Cells
-        // are SeparationRadius wide, so with the default sizes this is 1
-        // (the 3x3 block), but a big projectile or enemy would need more.
-        int cellRange = Mathf.CeilToInt((radius + _maxHitRadius) / SeparationRadius);
-        int cellX = CellCoord(point.X);
-        int cellZ = CellCoord(point.Z);
-
-        for (int dz = -cellRange; dz <= cellRange; dz++)
-        {
-            for (int dx = -cellRange; dx <= cellRange; dx++)
-            {
-                int slot = CellSlot(cellX + dx, cellZ + dz);
-                int start = _cellStart[slot];
-                int end = start + _cellCount[slot];
-
-                for (int e = start; e < end; e++)
-                {
-                    int j = _cellEntries[e];
-                    // Killed earlier this step but not removed yet: it is
-                    // already invisible, so don't let it soak up shots.
-                    if (_dead[j])
-                    {
-                        continue;
-                    }
-
-                    // The two circles overlap when their centres are closer
-                    // than the two radii added together.
-                    float reach = radius + _kinds[_kind[j]].Definition.HitRadius;
-                    float offsetX = _positions[j].X - point.X;
-                    float offsetZ = _positions[j].Z - point.Z;
-                    if (offsetX * offsetX + offsetZ * offsetZ < reach * reach && CanReach(point, j))
-                    {
-                        return j;
-                    }
-                }
-            }
-        }
-
-        return -1;
-    }
-
-    /// <summary>
-    /// Deals damage to enemy i (an index from HitTest, used in the same
-    /// physics step). An enemy whose health drops to 0 is marked dead but
-    /// stays in the arrays until the start of the next step. Removing it
-    /// right away would swap another enemy into its slot and leave the grid
-    /// pointing at the wrong enemies while projectiles are still being
-    /// checked against it.
-    /// </summary>
-    public void Damage(int i, float amount)
-    {
-        // Ignore bad indices and enemies that are already dead, so a
-        // second hit in the same step can't count a kill twice.
-        if (i < 0 || i >= _count || _dead[i])
-        {
-            return;
-        }
-
-        _health[i] -= amount;
-
-        // Start (or restart) the white flash; UpdateHitFlash ends it. Only
-        // swap the material if it isn't already flashing.
-        if (HitFlashMaterial != null && HitFlashDuration > 0.0f)
-        {
-            if (_flashTime[i] <= 0.0f)
-            {
-                SetHitFlash(i, true);
-            }
-            _flashTime[i] = HitFlashDuration;
-        }
-
-        if (_health[i] <= 0.0f)
-        {
-            _dead[i] = true;
-            // Hide it now so it vanishes on the frame it was killed, not
-            // one step later. A corpse takes its place for the death
-            // animation (sprite enemies only; others just vanish).
-            _bodies[i].Node.Visible = false;
-            StartCorpse(i);
-            Kills++;
-
-            // "?." calls Drop only if XpManager is set (not null).
-            XpManager?.Drop(_positions[i], _kinds[_kind[i]].Definition.XpPerKill);
-        }
-    }
-
-    /// <summary>
-    /// Removes every enemy marked dead by Damage. With the stress-test
-    /// TargetCount, UpdatePopulation then spawns replacements on the ring.
-    /// </summary>
-    private void RemoveDead()
-    {
-        // Backwards, for the same reason as the projectile loop: Despawn
-        // moves the last enemy into the freed slot, and going from the end
-        // that enemy has already been checked.
-        for (int i = _count - 1; i >= 0; i--)
-        {
-            if (_dead[i])
-            {
-                Despawn(i);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Removes enemy i: its node goes back to its kind's pool, and the last
-    /// alive enemy is moved into its slot, so the alive enemies always stay
-    /// packed at the start of the arrays ("swap remove"). Fast, but it
-    /// changes the order: never keep an enemy index around across frames.
-    ///
-    /// Private, because removing an enemy in the middle of a physics step
-    /// would break the grid. Other code kills enemies through Damage.
-    /// </summary>
-    private void Despawn(int i)
-    {
-        // End a flash still going, so the node goes back to the pool with
-        // its normal look.
-        if (_flashTime[i] > 0.0f)
-        {
-            SetHitFlash(i, false);
-        }
-
-        // Hide the node and push it back onto its kind's stack.
-        EnemyBody body = _bodies[i];
-        body.Node.Visible = false;
-        Kind kind = _kinds[_kind[i]];
-        kind.Free[kind.FreeCount] = body;
-        kind.FreeCount++;
-
-        int last = _count - 1;
-        _positions[i] = _positions[last];
-        _ids[i] = _ids[last];
-        _health[i] = _health[last];
-        _dead[i] = _dead[last];
-        _flashTime[i] = _flashTime[last];
-        _kind[i] = _kind[last];
-        _bodies[i] = _bodies[last];
-        _bodies[last] = null;
-        _count--;
-    }
-
-    /// <summary>
-    /// Sorts the alive enemies into grid cells (a "counting sort"): count
-    /// how many land in each slot, work out where each slot's run starts,
-    /// then drop every enemy into place.
-    /// </summary>
-    private void BuildGrid()
-    {
-        // Array.Clear resets every entry to 0 without allocating.
-        Array.Clear(_cellCount);
-
-        for (int i = 0; i < _count; i++)
-        {
-            int slot = CellSlot(CellCoord(_positions[i].X), CellCoord(_positions[i].Z));
-            _enemySlot[i] = slot;
-            _cellCount[slot]++;
-        }
-
-        int running = 0;
-        for (int s = 0; s < GridTableSize; s++)
-        {
-            _cellStart[s] = running;
-            running += _cellCount[s];
-        }
-
-        // Reuse _cellCount as a "how many placed so far" counter.
-        Array.Clear(_cellCount);
-        for (int i = 0; i < _count; i++)
-        {
-            int slot = _enemySlot[i];
-            _cellEntries[_cellStart[slot] + _cellCount[slot]] = i;
-            _cellCount[slot]++;
-        }
-    }
-
-    /// <summary>
-    /// For every enemy, adds up a push away from each neighbour that is too
-    /// close. The closer the neighbour, the stronger the push.
-    /// </summary>
-    private void ComputeSeparation()
-    {
-        float radiusSquared = SeparationRadius * SeparationRadius;
-
-        for (int i = 0; i < _count; i++)
-        {
-            Vector3 position = _positions[i];
-            Vector3 push = Vector3.Zero;
-            int cellX = CellCoord(position.X);
-            int cellZ = CellCoord(position.Z);
-
-            for (int dz = -1; dz <= 1; dz++)
-            {
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    int slot = CellSlot(cellX + dx, cellZ + dz);
-                    int start = _cellStart[slot];
-                    int end = start + _cellCount[slot];
-
-                    for (int e = start; e < end; e++)
-                    {
-                        int j = _cellEntries[e];
-                        if (j == i)
-                        {
-                            continue;
-                        }
-
-                        Vector3 away = position - _positions[j];
-                        away.Y = 0.0f;
-                        float distanceSquared = away.LengthSquared();
-                        if (distanceSquared >= radiusSquared)
-                        {
-                            continue;
-                        }
-
-                        if (distanceSquared < 0.000001f)
-                        {
-                            // Exactly on top of each other: there is no
-                            // "away", so pick a direction from the indices.
-                            away = new Vector3(i < j ? 1.0f : -1.0f, 0.0f, 0.0f);
-                            distanceSquared = 1.0f;
-                        }
-
-                        float distance = Mathf.Sqrt(distanceSquared);
-                        // 1 when touching, 0 at the edge of the radius.
-                        float strength = 1.0f - distance / SeparationRadius;
-                        push += away / distance * strength;
-                    }
-                }
-            }
-
-            _separation[i] = push;
-        }
-    }
-
-    /// <summary>
-    /// Steers every enemy toward the target, applies separation, and copies
-    /// the result to the enemy's node.
-    /// </summary>
-    private void MoveEnemies(float delta)
-    {
-        Vector3 targetPosition = Target.GlobalPosition;
-        Camera3D camera = GetCamera();
-        float despawnSquared = DespawnDistance * DespawnDistance;
-        // The most hearts any touching enemy would take this step.
-        int contactDamage = 0;
-
-        for (int i = 0; i < _count; i++)
-        {
-            EnemyDefinition definition = _kinds[_kind[i]].Definition;
-            Vector3 position = _positions[i];
-            Vector3 toTarget = targetPosition - position;
-            toTarget.Y = 0.0f;
-
-            // Left far behind: put it back on the ring around the player
-            // instead of letting it trudge all the way back.
-            if (toTarget.LengthSquared() > despawnSquared)
-            {
-                _positions[i] = RandomPointOnSpawnRing();
-                continue;
-            }
-
-            // 0 at StopDistance, rising to 1 (full speed) ArriveSlowdown
-            // metres further out.
-            float distance = toTarget.Length();
-            // Touching only counts with no wall in between. The wall check
-            // runs only for the few enemies already this close.
-            if (distance < definition.ContactRange
-                && (Obstacles == null || !Obstacles.IsLineBlocked(position, targetPosition)))
-            {
-                contactDamage = Math.Max(contactDamage, definition.ContactDamage);
-            }
-            float chase = Mathf.Clamp((distance - StopDistance) / ArriveSlowdown, 0.0f, 1.0f);
-
-            Vector3 velocity = toTarget.Normalized() * (definition.Speed * chase) + _separation[i] * SeparationStrength;
-            position += velocity * delta;
-            position.Y = 0.0f;
-            // Step back out of any wall or prop it just walked into. Doing
-            // it after the move (not by changing the velocity) also frees
-            // enemies that spawned inside something.
-            if (Obstacles != null)
-            {
-                position = Obstacles.PushOut(position, definition.BodyRadius);
-            }
-            _positions[i] = position;
-
-            // Face the direction of travel (the model's front is +Z, see
-            // Player.FaceDirection). Building the whole transform and
-            // setting it once is one call into the engine instead of two.
-            float yaw = Mathf.Atan2(velocity.X, velocity.Z);
-            EnemyBody body = _bodies[i];
-            body.Node.Transform = new Transform3D(new Basis(Vector3.Up, yaw), position);
-
-            // A sprite is a billboard, so turning the node doesn't show; it
-            // picks which drawn direction to show instead. It faces the
-            // player rather than its exact velocity, because the crowd's
-            // pushing makes velocity jitter, and the sprite would flicker
-            // between directions. PlayFacing does nothing if neither the
-            // animation nor the direction changed, so this is cheap.
-            DirectionalSprite3D sprite = body.Sprite;
-            if (sprite != null && camera != null)
-            {
-                sprite.PlayFacing(WalkAnimation, toTarget, camera);
-            }
-        }
-
-        // One touch is enough to cost a heart. TakeDamage ignores it while
-        // the player is still invulnerable from the previous hit, so it is
-        // fine to call it every step something is touching.
-        if (contactDamage > 0 && _targetStats != null)
-        {
-            _targetStats.TakeDamage(contactDamage);
-        }
-    }
-
-    /// <summary>
-    /// The active 3D camera, looked up once. Not in _Ready, because the
-    /// camera may not have become the current one yet when this node is
-    /// ready. Returns null if there's no camera.
-    /// </summary>
-    private Camera3D GetCamera()
-    {
-        // "??=" assigns only if the left side is still null.
-        _camera ??= GetViewport().GetCamera3D();
-        return _camera;
-    }
-
-    private Vector3 RandomPointOnSpawnRing()
-    {
-        float angle = Random.Shared.NextSingle() * Mathf.Tau;
-        Vector3 center = Target.GlobalPosition;
-        return new Vector3(
-            center.X + Mathf.Cos(angle) * SpawnDistance,
-            0.0f,
-            center.Z + Mathf.Sin(angle) * SpawnDistance);
-    }
-
-    /// <summary>
-    /// World coordinate -> grid cell number along one axis. Cells are as wide
-    /// as the separation radius, so any neighbour within that radius is in
-    /// the 3x3 cells around an enemy.
-    /// </summary>
-    private int CellCoord(float worldCoord)
-    {
-        return Mathf.FloorToInt(worldCoord / SeparationRadius);
-    }
-
-    /// <summary>
-    /// Maps a cell (x, z) to a slot in the fixed-size grid table.
-    /// </summary>
-    private static int CellSlot(int x, int z)
-    {
-        // Multiply by two large primes and mix them, which scatters nearby
-        // cells across the table. "unchecked" lets the multiplication wrap
-        // around on overflow instead of throwing an error. The "& (size - 1)"
-        // keeps the result in range; it works like "% size" but is only
-        // correct because GridTableSize is a power of two.
-        unchecked
-        {
-            int hash = (x * 73856093) ^ (z * 19349663);
-            return hash & (GridTableSize - 1);
-        }
     }
 }
