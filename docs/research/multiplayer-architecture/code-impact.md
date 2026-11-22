@@ -1,6 +1,6 @@
 # Impact on the Current Code
 
-Status: v0.5, 2026-11-22. **Exploration**, part of the [multiplayer
+Status: v0.6, 2026-11-22. **Exploration**, part of the [multiplayer
 architecture research](README.md). What in today's single-player code would
 have to change for multiplayer. Progress is noted per item.
 
@@ -59,10 +59,23 @@ Progress:
       [systems/pickups.md](../../systems/pickups.md). Checked: placed-coin
       pickup test identical before/after; XP invariant (gained + in orbs =
       kills x XP per kill) holds; screenshots.
-- [ ] `BreakableManager` the same way.
-- [ ] `WorldObstacles`: already almost pure data + math; may only need
-      its registration kept in the node.
-- [ ] Several players actually passed in (needs a player list).
+- [x] **Breakables** (2026-11-22): `BreakableSimulation` + `BreakableManager`.
+      Props never move or swap, so slot = index and there is no Step;
+      each damage call lists its hits (slot, broke) and the shell acts on
+      them at once. As built: [systems/breakables.md](../../systems/breakables.md).
+      Checked: every damage path (circle, arc, ring, projectile hit test,
+      hit vs break, broken takes no hits) gives identical results
+      before/after.
+- [x] **`WorldObstacles`: no split needed** (2026-11-22). It is already
+      shape data plus math with no visuals; the node only holds the
+      registry so blockers and props can find it. Cores use it through
+      `IObstacleQuery`. Adding and removing shapes stays on the node,
+      called by shells (blockers, `BreakableManager`).
+- The core/shell refactor is **done** for every simulation manager.
+- [ ] Next, outside this refactor: several players actually passed in.
+      Every core already takes a list of player positions; the shells
+      still pass one player. Needs a player list (comes with the
+      multiplayer spikes).
 
 Weapons' calls into the queries keep working (same types).
 
@@ -114,6 +127,7 @@ zero). See [stack.md](stack.md).
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.6 | Breakables split done; WorldObstacles needs no split; refactor complete. |
 | 2026-11-22 | v0.5 | Pickups and XP orbs split done. |
 | 2026-11-22 | v0.4 | Projectiles split done; cross-manager hits through interfaces. |
 | 2026-11-22 | v0.3 | Enemies split done (EnemySimulation + EnemyManager); progress list; open questions updated. |

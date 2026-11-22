@@ -1,12 +1,17 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 
 namespace BulletHeavenLike;
 
 /// <summary>
-/// Owns every breakable prop in the world (barrels, crates, ...): takes the
-/// hits weapons deal to them, and breaks them apart when their health runs
-/// out, throwing their pieces, puffing dust and dropping their loot.
+/// The breakable props in the scene (barrels, crates, ...): the "shell"
+/// around <see cref="BreakableSimulation"/>, which knows each prop's health
+/// and which attacks catch it. This node draws the props, and acts on every
+/// hit the core reports: a flash and squash, or on a break: hiding the
+/// model, throwing its pieces, puffing dust, dropping its loot and removing
+/// its collision, compass marker and enemy obstacle. Same split as
+/// EnemyManager / EnemySimulation.
 ///
 /// Props enter through <see cref="Add"/> (placed ones via
 /// <see cref="PlacedBreakable"/>). What a prop looks like and drops comes
@@ -17,8 +22,7 @@ namespace BulletHeavenLike;
 /// their enemy hits.
 ///
 /// Props are few and never move, so they keep their slot for the whole run
-/// (no swap remove): a broken one is just marked broken. That also means a
-/// slot number stays valid across frames, unlike an enemy index.
+/// (no swap remove, see BreakableSimulation); every array here is by slot.
 ///
 /// Broken pieces are pooled MeshInstance3D nodes moved by a few lines of
 /// code (gravity, a bounce, spin), not physics bodies: cheaper on the phone
@@ -78,12 +82,10 @@ public partial class BreakableManager : Node3D, IBreakableTargets
     [Export] public int MaxPieces = 64;
     [Export] public int MaxDust = 8;
 
-    // ---- Prop data. Index i in every array is the same prop. Only the
-    // first _count slots are used. ----------------------------------------
-    private BreakableDefinition[] _definitions;
-    private Transform3D[] _transforms;
-    private float[] _health;
-    private bool[] _broken;
+    // The game logic. Null until _Ready.
+    private BreakableSimulation _sim;
+
+    // ---- Looks and world hookups, by slot (the core's slot numbers). ------
     private float[] _flashTime;   // seconds left of the white flash
     private float[] _squashTime;  // seconds left of the squash
     private Node3D[] _roots;      // holds the model and the solid body
@@ -94,7 +96,6 @@ public partial class BreakableManager : Node3D, IBreakableTargets
     private List<MeshInstance3D>[] _meshes;
     private int[] _markerIds;     // WorldMarkers id, or -1 for none
     private int[] _obstacleIds;   // WorldObstacles id, or -1 for none
-    private int _count;
 
     // ---- Flying pieces: the first _pieceCount are in the air. -----------
     private MeshInstance3D[] _pieceNodes;
@@ -120,10 +121,9 @@ public partial class BreakableManager : Node3D, IBreakableTargets
 
     public override void _Ready()
     {
-        _definitions = new BreakableDefinition[MaxBreakables];
-        _transforms = new Transform3D[MaxBreakables];
-        _health = new float[MaxBreakables];
-        _broken = new bool[MaxBreakables];
+        // Obstacles is handed over as IObstacleQuery: the core only asks it
+        // whether a wall stands between an attack and a prop.
+        _sim = new BreakableSimulation(MaxBreakables, Obstacles);
         _flashTime = new float[MaxBreakables];
         _squashTime = new float[MaxBreakables];
         _roots = new Node3D[MaxBreakables];
@@ -161,22 +161,18 @@ public partial class BreakableManager : Node3D, IBreakableTargets
     /// </summary>
     public void Add(BreakableDefinition definition, Transform3D transform)
     {
-        if (definition == null)
+        if (definition == null || _sim == null)
             return;
-        if (_count >= MaxBreakables)
+        int i = _sim.Add(definition, transform);
+        if (i == BreakableSimulation.NoProp)
         {
             GD.PushWarning($"BreakableManager full ({MaxBreakables}); {definition.DisplayName} not added.");
             return;
         }
 
-        int i = _count;
-        _count++;
-        _definitions[i] = definition;
         _markerIds[i] = definition.Marker != null && WorldMarkers != null
             ? WorldMarkers.Add(definition.Marker, transform.Origin)
             : -1;
-        _transforms[i] = transform;
-        _health[i] = definition.Health;
 
         // Props are added when a level starts, so making nodes here is fine
         // (the pooling rule is about things made every frame).
@@ -211,113 +207,64 @@ public partial class BreakableManager : Node3D, IBreakableTargets
             : -1;
     }
 
-    // ---- Hits. Weapons call these next to their enemy hits. --------------
+    // ---- Hits. Weapons call these next to their enemy hits. The core
+    // decides what is hit; ApplyHits shows it straight away. See
+    // BreakableSimulation for what each one catches. ----------------------
 
-    /// <summary>Damages every prop that overlaps a circle on the ground
-    /// (a smash, an explosion).</summary>
     public void DamageCircle(Vector3 centre, float radius, float damage)
     {
-        for (int i = 0; i < _count; i++)
-        {
-            if (!_broken[i] && GroundDistance(i, centre) <= radius + _definitions[i].Radius && CanReach(centre, i))
-                Damage(i, damage);
-        }
+        _sim.DamageCircle(centre, radius, damage);
+        ApplyHits();
     }
 
-    /// <summary>Damages every prop that overlaps a wedge (a sword swing):
-    /// within range of origin and within halfArc radians either side of
-    /// forward.</summary>
     public void DamageArc(Vector3 origin, Vector3 forward, float range, float halfArc, float damage)
     {
-        for (int i = 0; i < _count; i++)
-        {
-            if (_broken[i])
-                continue;
-            float radius = _definitions[i].Radius;
-            if (GroundDistance(i, origin) > range + radius)
-                continue;
-            if (!InArc(i, origin, forward, halfArc))
-                continue;
-            if (!CanReach(origin, i))
-                continue;
-            Damage(i, damage);
-        }
+        _sim.DamageArc(origin, forward, range, halfArc, damage);
+        ApplyHits();
     }
 
-    /// <summary>
-    /// Damages the props an expanding wave's edge passed since its last
-    /// step: those whose nearest edge is further than innerRadius from
-    /// centre, but not further than outerRadius. Each prop is passed only
-    /// once, so it's hit once per wave. An arc wave also checks the angle
-    /// (isArc, direction, halfAngle; see ExpandingWave).
-    /// </summary>
     public void DamageRing(Vector3 centre, float innerRadius, float outerRadius, float damage,
         bool isArc, Vector3 direction, float halfAngle)
     {
-        for (int i = 0; i < _count; i++)
-        {
-            if (_broken[i])
-                continue;
-            float edge = Mathf.Max(0.0f, GroundDistance(i, centre) - _definitions[i].Radius);
-            if (edge <= innerRadius || edge > outerRadius)
-                continue;
-            if (isArc && !InArc(i, centre, direction, halfAngle))
-                continue;
-            if (!CanReach(centre, i))
-                continue;
-            Damage(i, damage);
-        }
+        _sim.DamageRing(centre, innerRadius, outerRadius, damage, isArc, direction, halfAngle);
+        ApplyHits();
     }
 
-    /// <summary>
-    /// For projectiles: damages the first prop within radius of point and
-    /// returns true, so the projectile can stop there. False if it hit
-    /// nothing.
-    /// </summary>
+    /// <summary>For projectiles (IBreakableTargets): damages the first prop
+    /// within radius of point; true if one was hit.</summary>
     public bool HitTest(Vector3 point, float radius, float damage)
     {
-        for (int i = 0; i < _count; i++)
+        bool hit = _sim.HitTest(point, radius, damage);
+        ApplyHits();
+        return hit;
+    }
+
+    /// <summary>Acts on what the core's last damage call hit.</summary>
+    private void ApplyHits()
+    {
+        ReadOnlySpan<BreakableSimulation.Hit> hits = _sim.Hits;
+        for (int n = 0; n < hits.Length; n++)
         {
-            if (_broken[i] || point.Y > _definitions[i].Height * _transforms[i].Basis.Scale.Y)
-                continue;
-            if (GroundDistance(i, point) <= radius + _definitions[i].Radius)
+            int i = hits[n].Slot;
+            if (hits[n].Broke)
             {
-                Damage(i, damage);
-                return true;
+                Break(i);
+                continue;
             }
+
+            if (HitFlashMaterial != null)
+            {
+                foreach (MeshInstance3D mesh in _meshes[i])
+                    mesh.MaterialOverride = HitFlashMaterial;
+                _flashTime[i] = HitFlashDuration;
+            }
+            _squashTime[i] = SquashDuration;
         }
-        return false;
     }
 
-    // No wall between an attack's centre and prop i (projectiles don't
-    // need this: walls stop them before they get here).
-    private bool CanReach(Vector3 from, int i)
-    {
-        return Obstacles == null || !Obstacles.IsLineBlocked(from, _transforms[i].Origin);
-    }
-
-    private void Damage(int i, float amount)
-    {
-        _health[i] -= amount;
-
-        if (_health[i] <= 0.0f)
-        {
-            Break(i);
-            return;
-        }
-
-        if (HitFlashMaterial != null)
-        {
-            foreach (MeshInstance3D mesh in _meshes[i])
-                mesh.MaterialOverride = HitFlashMaterial;
-            _flashTime[i] = HitFlashDuration;
-        }
-        _squashTime[i] = SquashDuration;
-    }
-
+    // Everything a break sets off. The core has already marked it broken.
     private void Break(int i)
     {
-        _broken[i] = true;
         // Remove ignores -1, so no check needed for unmarked props.
         WorldMarkers?.Remove(_markerIds[i]);
         _markerIds[i] = -1;
@@ -329,8 +276,8 @@ public partial class BreakableManager : Node3D, IBreakableTargets
         Obstacles?.Remove(_obstacleIds[i]);
         _obstacleIds[i] = -1;
 
-        BreakableDefinition definition = _definitions[i];
-        Transform3D transform = _transforms[i];
+        BreakableDefinition definition = _sim.GetDefinition(i);
+        Transform3D transform = _sim.GetTransform(i);
         Vector3 centre = transform.Origin;
 
         // End a hit flash still going, or the pieces would be cut with the
@@ -417,9 +364,10 @@ public partial class BreakableManager : Node3D, IBreakableTargets
     // The hit flash and squash of props that were hit.
     private void UpdateProps(float dt)
     {
-        for (int i = 0; i < _count; i++)
+        int count = _sim.Count;
+        for (int i = 0; i < count; i++)
         {
-            if (_broken[i])
+            if (_sim.IsBroken(i))
                 continue;
 
             if (_flashTime[i] > 0.0f)
@@ -503,32 +451,6 @@ public partial class BreakableManager : Node3D, IBreakableTargets
     }
 
     // ---- Helpers ---------------------------------------------------------
-
-    private float GroundDistance(int i, Vector3 point)
-    {
-        Vector3 origin = _transforms[i].Origin;
-        float dx = origin.X - point.X;
-        float dz = origin.Z - point.Z;
-        return Mathf.Sqrt(dx * dx + dz * dz);
-    }
-
-    /// <summary>Whether prop i overlaps the slice that spreads halfAngle
-    /// radians either side of direction from origin. Its body widens the
-    /// slice by the angle its radius covers, like enemies in the sword
-    /// swing.</summary>
-    private bool InArc(int i, Vector3 origin, Vector3 direction, float halfAngle)
-    {
-        Vector3 offset = _transforms[i].Origin - origin;
-        offset.Y = 0.0f;
-        float distance = offset.Length();
-        float radius = _definitions[i].Radius;
-        if (distance <= radius)
-            return true; // it covers the origin, so every direction
-        direction.Y = 0.0f;
-        float angle = direction.AngleTo(offset);
-        float bodyAngle = Mathf.Asin(radius / distance);
-        return angle <= halfAngle + bodyAngle;
-    }
 
     /// <summary>A plain brown cylinder, used when the model file is
     /// missing.</summary>

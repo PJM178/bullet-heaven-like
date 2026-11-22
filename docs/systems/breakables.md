@@ -1,6 +1,6 @@
 # Breakable props
 
-Status: v1.2, 2026-11-22. Documents breakable props **as built**. Why it is
+Status: v1.3, 2026-11-22. Documents breakable props **as built**. Why it is
 shaped this way: [design/breakables.md](../design/breakables.md).
 
 ## Overview
@@ -38,7 +38,8 @@ One barrel is placed in `main.tscn` for testing.
 | --- | --- | --- |
 | `BreakableDefinition` | `props/breakables/BreakableDefinition.cs` | Resource: health, radius, height, `ModelPath`, `Slices`, `DustFramesPath`, `Loot` (a `LootTable`, dropped through `PickupManager.DropLoot`). |
 | Barrel | `props/breakables/barrel.tres` | The barrel's definition. |
-| `BreakableManager` | `props/breakables/BreakableManager.cs`, node in `main.tscn` | Implements `IBreakableTargets` (`HitTest`, used by `ProjectileSimulation`). Slots kept for the whole run (no swap remove; a broken prop is marked broken); one `StaticBody3D` cylinder per prop blocks the player. `Add`; hits (`DamageCircle`, `DamageArc`, `DamageRing`, `HitTest`); flash, squash, break, pooled pieces and dust. |
+| `BreakableSimulation` | `props/breakables/BreakableSimulation.cs` | Core (plain C#): per slot definition, transform, health, broken; `Add`; the hit tests (`DamageCircle`, `DamageArc`, `DamageRing`, `HitTest`), wall-aware through `IObstacleQuery`; each call lists its `Hits` (slot, broke). No `Step`: nothing changes between hits. |
+| `BreakableManager` | `props/breakables/BreakableManager.cs`, node in `main.tscn` | Shell. Implements `IBreakableTargets` (`HitTest`, used by `ProjectileSimulation`). Each hit method calls the core, then acts on its `Hits` straight away (flash and squash, or break: hide, pieces, dust, loot, collision off, marker and obstacle removed). Slots kept for the whole run (no swap remove; a broken prop is marked broken); one `StaticBody3D` cylinder per prop blocks the player. `Add`; hits (`DamageCircle`, `DamageArc`, `DamageRing`, `HitTest`); flash, squash, break, pooled pieces and dust. |
 | `PlacedBreakable` | `props/breakables/PlacedBreakable.cs` | Editor marker; hands its transform to the manager on start. |
 | `MeshShatter` | `props/breakables/MeshShatter.cs` | Cuts a model into slices + top + bottom (triangles facing up or down go to the top/bottom piece, the rest to cake slices around the upright axis); run once per kind, on its first break. |
 | `LootTable` | `pickups/LootTable.cs` | Loot lines; see [pickups.md](pickups.md), Loot. |
@@ -62,3 +63,4 @@ One barrel is placed in `main.tscn` for testing.
 | 2026-11-14 | v1 | Breakable props: definitions, manager, mesh shatter, loot lines; the barrel. |
 | 2026-11-15 | v1.1 | Loot is a `LootTable` rolled by `PickupManager.DropLoot`. |
 | 2026-11-22 | v1.2 | `BreakableManager` implements `IBreakableTargets` (for the projectile core). |
+| 2026-11-22 | v1.3 | Split into `BreakableSimulation` (core) and `BreakableManager` (shell). Behaviour unchanged. |
