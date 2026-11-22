@@ -44,6 +44,9 @@ the method below.
 - If something goes faster or slower than planned, the developer decides
   the pace.
 
+A short version of these rules is in `.claude/rules/learning-projects.md`,
+which is loaded into every Claude session; keep the two in sync.
+
 ## Layout
 
 - Docs: `docs/learning/<project>/`: README.md (why, steps with status) plus
