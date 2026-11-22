@@ -1,6 +1,6 @@
 # Pickups
 
-Status: v1.1, 2026-11-15. Documents pickups **as built**. Why it is shaped
+Status: v1.2, 2026-11-22. Documents pickups **as built**. Why it is shaped
 this way: [design/pickups.md](../design/pickups.md).
 
 ## Overview
@@ -45,8 +45,10 @@ several sources is saved as its own `.tres`.
 | --- | --- | --- |
 | `PickupDefinition` | `pickups/PickupDefinition.cs` | Resource: `Effect` (`Coins`, `Heal`), `Amount`, look (`FramesPath`, `PixelSize`, `Height`). |
 | Coin definitions | `pickups/coins/coin_*.tres` | One per tier. |
-| `PickupManager` | `pickups/PickupManager.cs`, node in `main.tscn` | `Drop(definition, position)`, `DropLoot(table, centre, scatter)`; touch check each physics step; pool of `MaxPickups` (200) sprites. When full, a drop is collected directly instead of lost. |
-| `XpManager` | `pickups/XpManager.cs` | XP orbs, all drawn by one MultiMesh; separate from `PickupManager`. |
+| `PickupSimulation` | `pickups/PickupSimulation.cs` | Core (plain C#): pickup positions and definitions (swap remove, a fixed slot each), `Drop` (index or `NoPickup` when full), `RollLoot` (rolls a table into a reused results array), `Step(players, pickupRadii)` filling `Collected` (definition + player) and `RemovedSlots`. |
+| `PickupManager` | `pickups/PickupManager.cs`, node in `main.tscn` | Shell: `Drop(definition, position)`, `DropLoot(table, centre, scatter)` (rolled by the core, at most 64 per roll), one `AnimatedSprite3D` per slot, `MaxPickups` (200). Gives collections to `PlayerStats.Collect`. When full, a drop is collected directly instead of lost. |
+| `XpSimulation` | `pickups/XpSimulation.cs` | Core: orb pop / hover / home, per orb the player it homes to (nearest within their magnet radius); `Step(delta, players, magnetRadii, xpGained)`; `Changed` lists orbs that moved or changed index. When full, XP is merged into an existing orb. |
+| `XpManager` | `pickups/XpManager.cs` | Shell: draws orb i as MultiMesh copy i, rewriting only `Changed` ones; adds each step's absorbed XP to the player in one `AddExperience` call (it handles several level-ups). Separate from `PickupManager`. |
 | `LootTable` / `LootDrop` | `pickups/LootTable.cs`, `pickups/LootDrop.cs` | A list of loot lines; one line: pickup, chance, count range. |
 | `PlacedPickup` | `pickups/PlacedPickup.cs` | Editor marker; hands itself to the manager on start, then frees itself. |
 | `PlayerStats.Collect` | `player/PlayerStats.cs` | Applies a pickup's effect. |
@@ -71,3 +73,4 @@ Debug: the stress-test HUD shows the coin count.
 | --- | --- | --- |
 | 2026-11-14 | v1 | Touch pickups: PickupDefinition, PickupManager, PlacedPickup; five coin tiers; radii moved to PlayerStats. |
 | 2026-11-15 | v1.1 | `LootTable` + `PickupManager.DropLoot` (loot rolled in one place); coins banked on death. |
+| 2026-11-22 | v1.2 | Split into cores (`PickupSimulation`, `XpSimulation`) and shells (`PickupManager`, `XpManager`); cores take player lists; behaviour unchanged. |

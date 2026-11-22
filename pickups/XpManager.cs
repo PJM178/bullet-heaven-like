@@ -4,25 +4,17 @@ using Godot;
 namespace BulletHeavenLike;
 
 /// <summary>
-/// Owns every experience orb in the world.
+/// The experience orbs in the scene: the "shell" around
+/// <see cref="XpSimulation"/>, which pops, hovers and homes the orbs. This
+/// node owns one, steps it every physics tick, draws it, and gives the XP
+/// that orbs bring to the player. Same split as EnemyManager /
+/// EnemySimulation.
 ///
-/// An orb's life:
-///   1. Pop: a kill throws one orb, worth the kill's XP, up and a little
-///      to the side (Drop). It arcs under gravity until it falls back to
-///      hover height.
-///   2. Hover: it floats in place, bobbing (the bob is done on the GPU,
-///      see pickups/xp_orb.gdshader).
-///   3. Home: after a short pause, an orb within the player's magnet
-///      radius (PlayerStats.MagnetRadius) flies at them, speeding up, and
-///      is absorbed: the player gains its XP. Orbs further away keep
-///      hovering until the player comes close.
-///
-/// Same data layout as EnemyManager and ProjectileManager: plain arrays,
-/// one loop. Unlike those, orbs have no nodes at all. They are all drawn by
-/// a single MultiMesh: one mesh, drawn many times in one go, each copy at
-/// its own transform. Orbs are identical and can pile up into the
-/// thousands, which is exactly what a MultiMesh is for, and it's simpler
-/// than a node pool: "showing" orb i just means writing its transform.
+/// Orbs have no nodes at all. They are all drawn by a single MultiMesh: one
+/// mesh, drawn many times in one go, each copy at its own transform. Orbs
+/// are identical and can pile up into the thousands, which is exactly what
+/// a MultiMesh is for: "showing" orb i just means writing copy i's
+/// transform. The bob is done on the GPU (pickups/xp_orb.gdshader).
 ///
 /// Keep this node at the origin with no rotation or scale; orb positions
 /// are used as-is.
@@ -69,53 +61,33 @@ public partial class XpManager : Node3D
     [Export] public Material OrbMaterial;
     [Export] public float OrbRadius = 0.09f;
 
-    // What an orb is doing. ": byte" stores it in one byte instead of the
-    // default four; there are only three values.
-    private enum OrbState : byte
-    {
-        Popping,
-        Hovering,
-        Homing,
-    }
-
-    // ---- Orb data. Index i in every array is the same orb. Only the
-    // first _count entries are alive. ------------------------------------
-    private Vector3[] _positions;
-    private Vector3[] _velocities;
-    private OrbState[] _states;
-    private float[] _timers;     // Hovering: seconds left before it may home
-    private float[] _speeds;     // Homing: current speed toward the player
-    private int[] _values;       // XP this orb is worth
-    private int _count;
+    // The game logic. Null until _Ready.
+    private XpSimulation _sim;
 
     private MultiMesh _multiMesh;
 
-    // When the pool is full, XP goes to the orb at this index next, moving
-    // round so one orb doesn't swallow everything.
-    private int _mergeCursor;
-
-    // One random number generator, reused for every orb.
-    private readonly Random _random = new();
+    // What is handed to the core every step, made once and reused. One
+    // entry per player; there is only one player for now.
+    private readonly Vector3[] _playerPositions = new Vector3[1];
+    private readonly float[] _magnetRadii = new float[1];
+    private readonly int[] _xpGained = new int[1];
 
     /// <summary>How many orbs exist (read by the HUD).</summary>
-    public int Count => _count;
+    public int Count => _sim?.Count ?? 0;
 
     public override void _Ready()
     {
-        _positions = new Vector3[MaxOrbs];
-        _velocities = new Vector3[MaxOrbs];
-        _states = new OrbState[MaxOrbs];
-        _timers = new float[MaxOrbs];
-        _speeds = new float[MaxOrbs];
-        _values = new int[MaxOrbs];
+        _sim = new XpSimulation(MaxOrbs);
+        // Now too, not only each step: Drop can come before the first step.
+        PushSettings();
 
         _multiMesh = new MultiMesh
         {
             // Each copy gets a full 3D transform (we only use its position).
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             // Reserve room for every orb up front; VisibleInstanceCount
-            // says how many of them to actually draw (the first _count).
-            InstanceCount = MaxOrbs,
+            // says how many of them to actually draw (the first Count).
+            InstanceCount = _sim.Capacity,
             VisibleInstanceCount = 0,
             Mesh = BuildOrbMesh(),
             // Normally the MultiMesh re-measures the box around all its
@@ -154,39 +126,24 @@ public partial class XpManager : Node3D
     /// <summary>
     /// Pops one orb worth xp from a point on the ground (where an enemy
     /// died). Safe to call at any time, including from another manager's
-    /// physics step: it only adds an orb at the end of the arrays.
+    /// physics step.
     /// </summary>
     public void Drop(Vector3 groundPosition, int xp)
     {
-        if (xp <= 0)
+        if (_sim == null)
         {
             return;
         }
 
-        if (_count >= MaxOrbs)
+        int i = _sim.Drop(groundPosition, xp);
+        if (i == XpSimulation.Merged)
         {
-            // Full: fold the XP into an existing orb instead of losing it.
-            _values[_mergeCursor % _count] += xp;
-            _mergeCursor++;
-            return;
+            return; // no new orb to draw
         }
 
-        int i = _count;
-        _count++;
-
-        // A random direction around the circle, and random strengths
-        // between half and full, so each pop looks a little different.
-        float angle = (float)_random.NextDouble() * Mathf.Tau;
-        float spread = PopSpread * (0.5f + 0.5f * (float)_random.NextDouble());
-        float up = PopUp * (0.5f + 0.5f * (float)_random.NextDouble());
-
-        _positions[i] = new Vector3(groundPosition.X, PopHeight, groundPosition.Z);
-        _velocities[i] = new Vector3(Mathf.Cos(angle) * spread, up, Mathf.Sin(angle) * spread);
-        _states[i] = OrbState.Popping;
-        _values[i] = xp;
-
-        _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, _positions[i]));
-        _multiMesh.VisibleInstanceCount = _count;
+        // Draw it right away, already where it starts.
+        DrawOrb(i);
+        _multiMesh.VisibleInstanceCount = _sim.Count;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -196,104 +153,54 @@ public partial class XpManager : Node3D
             return;
         }
 
-        float dt = (float)delta;
-        Vector3 playerPosition = Player.GlobalPosition;
-        Vector3 absorbPoint = playerPosition + Vector3.Up * AbsorbHeight;
-        float magnetSquared = Player.Stats.MagnetRadius * Player.Stats.MagnetRadius;
-        float absorbSquared = AbsorbRadius * AbsorbRadius;
+        PushSettings();
 
-        // Backwards, because absorbing an orb moves the last orb into its
-        // slot (swap remove); going from the end, that one was already done.
-        for (int i = _count - 1; i >= 0; i--)
+        // Godot -> core: where the player is and how far their magnet reaches.
+        _playerPositions[0] = Player.GlobalPosition;
+        _magnetRadii[0] = Player.Stats.MagnetRadius;
+
+        _sim.Step((float)delta, _playerPositions, _magnetRadii, _xpGained);
+
+        // Core -> Godot: redraw only the orbs that moved or changed index.
+        ReadOnlySpan<int> changed = _sim.Changed;
+        int count = _sim.Count;
+        for (int n = 0; n < changed.Length; n++)
         {
-            switch (_states[i])
+            // An index at or past Count is no longer drawn; skip it.
+            if (changed[n] < count)
             {
-                case OrbState.Popping:
-                    // Simple projectile motion: gravity pulls velocity down,
-                    // drag slows the sideways part, velocity moves the orb.
-                    Vector3 velocity = _velocities[i];
-                    velocity.Y -= Gravity * dt;
-                    float drag = Mathf.Exp(-AirDrag * dt);
-                    velocity.X *= drag;
-                    velocity.Z *= drag;
-                    _velocities[i] = velocity;
-                    _positions[i] += velocity * dt;
-
-                    // Coming down through hover height: settle there.
-                    if (velocity.Y < 0.0f && _positions[i].Y <= HoverHeight)
-                    {
-                        _positions[i].Y = HoverHeight;
-                        _states[i] = OrbState.Hovering;
-                        _timers[i] = HoverDelay;
-                    }
-                    UpdateTransform(i);
-                    break;
-
-                case OrbState.Hovering:
-                    // Hovering orbs don't move (the bob is in the shader), so
-                    // they cost only this check, and no transform update.
-                    _timers[i] -= dt;
-                    if (_timers[i] <= 0.0f)
-                    {
-                        float dx = _positions[i].X - playerPosition.X;
-                        float dz = _positions[i].Z - playerPosition.Z;
-                        if (dx * dx + dz * dz <= magnetSquared)
-                        {
-                            _states[i] = OrbState.Homing;
-                            _speeds[i] = HomingStartSpeed;
-                        }
-                    }
-                    break;
-
-                case OrbState.Homing:
-                    // Accelerate toward the player's chest. Speeding up
-                    // (rather than a fixed speed) makes it look like a pull,
-                    // and guarantees orbs catch a player who runs away.
-                    _speeds[i] += HomingAcceleration * dt;
-                    Vector3 toPlayer = absorbPoint - _positions[i];
-                    float distanceSquared = toPlayer.LengthSquared();
-                    float step = _speeds[i] * dt;
-
-                    // Absorbed if it's close, or would overshoot this step.
-                    if (distanceSquared <= absorbSquared || step * step >= distanceSquared)
-                    {
-                        Player.Stats.AddExperience(_values[i]);
-                        Remove(i);
-                        continue; // "continue" skips to the next loop round
-                    }
-
-                    _positions[i] += toPlayer / Mathf.Sqrt(distanceSquared) * step;
-                    UpdateTransform(i);
-                    break;
+                DrawOrb(changed[n]);
             }
         }
+        _multiMesh.VisibleInstanceCount = count;
+
+        // All the XP absorbed this step in one call. AddExperience handles
+        // several level-ups at once, so this is the same as one per orb.
+        if (_xpGained[0] > 0)
+        {
+            Player.Stats.AddExperience(_xpGained[0]);
+        }
     }
 
-    private void UpdateTransform(int i)
+    /// <summary>Copies the [Export] settings into the core (see EnemyManager).</summary>
+    private void PushSettings()
+    {
+        _sim.PopHeight = PopHeight;
+        _sim.PopSpread = PopSpread;
+        _sim.PopUp = PopUp;
+        _sim.Gravity = Gravity;
+        _sim.AirDrag = AirDrag;
+        _sim.HoverHeight = HoverHeight;
+        _sim.HoverDelay = HoverDelay;
+        _sim.HomingStartSpeed = HomingStartSpeed;
+        _sim.HomingAcceleration = HomingAcceleration;
+        _sim.AbsorbHeight = AbsorbHeight;
+        _sim.AbsorbRadius = AbsorbRadius;
+    }
+
+    private void DrawOrb(int i)
     {
         // Transform3D is a struct, so building one here doesn't allocate.
-        _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, _positions[i]));
-    }
-
-    /// <summary>
-    /// Removes orb i by moving the last orb into its slot ("swap remove"),
-    /// so alive orbs stay packed at the start and the MultiMesh can draw
-    /// just the first _count copies.
-    /// </summary>
-    private void Remove(int i)
-    {
-        int last = _count - 1;
-        if (i != last)
-        {
-            _positions[i] = _positions[last];
-            _velocities[i] = _velocities[last];
-            _states[i] = _states[last];
-            _timers[i] = _timers[last];
-            _speeds[i] = _speeds[last];
-            _values[i] = _values[last];
-            UpdateTransform(i);
-        }
-        _count--;
-        _multiMesh.VisibleInstanceCount = _count;
+        _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, _sim.Positions[i]));
     }
 }
