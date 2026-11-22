@@ -26,7 +26,7 @@ namespace BulletHeavenLike;
 ///
 /// Keep this node at the origin with no rotation or scale.
 /// </summary>
-public partial class BreakableManager : Node3D
+public partial class BreakableManager : Node3D, IBreakableTargets
 {
     /// <summary>The group this manager is in, so placed props can find it
     /// without a NodePath.</summary>

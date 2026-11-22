@@ -1,16 +1,25 @@
 # Projectiles
 
-Status: v1, 2026-11-15. Documents projectiles **as built**. Why it is
+Status: v1.1, 2026-11-22. Documents projectiles **as built**. Why it is
 shaped this way: [design/projectiles.md](../design/projectiles.md).
 
 ## Overview
 
-`ProjectileManager` is the only code that moves projectiles. Each physics
-step it moves every projectile, tests the step's path against walls
-(`WorldObstacles.IsLineBlocked`), hits enemies through the wall-aware
-`EnemyManager.QueryCircle`, each enemy at most once (hit memory of 16 ids
-per projectile), up to `Pierce`, stops at the first prop
-(`BreakableManager`), and flies a returning projectile back to its thrower.
+Split in two, like the enemies (core and shell):
+
+- **`ProjectileSimulation`** (core, plain C# class) is the only code that
+  moves projectiles. Each physics step it moves every projectile, tests the
+  step's path against walls (`IObstacleQuery.IsLineBlocked`), hits enemies
+  through the wall-aware `IEnemyTargets.QueryCircle` / `Damage`, each enemy
+  at most once (hit memory of 16 ids per projectile), up to `Pierce`, stops
+  at the first prop (`IBreakableTargets.HitTest`), and flies a returning
+  projectile back to its thrower (a player index; player positions are
+  passed to `Step`). Never touches nodes.
+- **`ProjectileManager`** (shell, the node) owns one, steps it, and draws
+  it: one `MeshInstance3D` and one `Sprite3D` per slot, the one that fits
+  the definition shown. `EnemyManager`, `BreakableManager` and
+  `WorldObstacles` implement the three interfaces, so a projectile's hit
+  goes through `EnemyManager.Damage` and the flash shows at once.
 
 No committed weapon fires projectiles today; the shard (`shard.tres`) is
 the committed example definition. Local research throw weapons use the
@@ -47,7 +56,9 @@ runtime need no NodePaths. Subclasses override `BuildProjectile` /
 
 | Piece | Where | Role |
 | --- | --- | --- |
-| `ProjectileManager` | `weapons/projectiles/ProjectileManager.cs` | `Spawn(definition, position, direction, ...)`; two node pools (meshes, sprites), each `MaxProjectiles` (256), dressed from the definition on spawn. Returns false if the pool is full. |
+| `ProjectileSimulation` | `weapons/projectiles/ProjectileSimulation.cs` | Core: projectile data (swap remove, a fixed slot each), `Spawn` (returns the index or `NoProjectile`), `Step(delta, players)`, `RemovedSlots`. |
+| `ProjectileManager` | `weapons/projectiles/ProjectileManager.cs` | Shell: `Spawn(definition, position, direction, returnTo)` (`returnTo` a node, mapped to a player index, up to 8 throwers); per slot a mesh and a sprite node, `MaxProjectiles` (256) slots, dressed from the definition on spawn; picture spin is looks-only, advanced per rendered frame. Returns false if full. Physics priority 10 (after enemies). |
+| `IEnemyTargets`, `IBreakableTargets` | `enemies/`, `props/breakables/` | What the core needs from enemies (QueryCircle, GetId, Damage) and props (HitTest); implemented by `EnemyManager` and `BreakableManager`. |
 | `ProjectileDefinition` | `weapons/projectiles/ProjectileDefinition.cs` | Resource, see above. |
 | `ProjectileWeapon` | `weapons/projectiles/ProjectileWeapon.cs` | Firing, see above. |
 
@@ -64,4 +75,5 @@ None decided.
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v1.1 | Split into ProjectileSimulation (core) and ProjectileManager (shell); IEnemyTargets / IBreakableTargets; returning projectiles target a player index; one mesh + one sprite node per slot. Behaviour unchanged. |
 | 2026-11-15 | v1 | First systems doc; technical content moved here from design/projectiles.md. |

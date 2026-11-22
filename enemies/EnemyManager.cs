@@ -22,7 +22,7 @@ namespace BulletHeavenLike;
 /// own pool of nodes, made once in _Ready and reused: nothing is created or
 /// freed while the game runs.
 /// </summary>
-public partial class EnemyManager : Node3D
+public partial class EnemyManager : Node3D, IEnemyTargets
 {
     /// <summary>The group this manager is in, so weapons added at runtime
     /// can find it without a NodePath.</summary>

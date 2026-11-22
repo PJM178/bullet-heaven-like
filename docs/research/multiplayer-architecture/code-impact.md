@@ -1,6 +1,6 @@
 # Impact on the Current Code
 
-Status: v0.3, 2026-11-22. **Exploration**, part of the [multiplayer
+Status: v0.4, 2026-11-22. **Exploration**, part of the [multiplayer
 architecture research](README.md). What in today's single-player code would
 have to change for multiplayer. Progress is noted per item.
 
@@ -44,8 +44,14 @@ Progress:
       [systems/enemies.md](../../systems/enemies.md). Checked with the local
       headless tests before/after (walls, kinds, sword, wall blocking):
       same results.
-- [ ] `ProjectileManager`, `PickupManager` / `XpManager`, `BreakableManager`
-      the same way.
+- [x] **Projectiles** (2026-11-22): `ProjectileSimulation` (core) +
+      `ProjectileManager` (shell). Hits on other managers go through
+      interfaces they implement (`IEnemyTargets`, `IBreakableTargets`), so
+      damage still shows its flash at once. Returning projectiles target a
+      player index instead of a node. As built:
+      [systems/projectiles.md](../../systems/projectiles.md). Local tests
+      before/after match (flight, return, walls, sealed room).
+- [ ] `PickupManager` / `XpManager`, `BreakableManager` the same way.
 - [ ] `WorldObstacles`: already almost pure data + math; may only need
       its registration kept in the node.
 - [ ] Several players actually passed in (needs a player list).
@@ -100,6 +106,7 @@ zero). See [stack.md](stack.md).
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.4 | Projectiles split done; cross-manager hits through interfaces. |
 | 2026-11-22 | v0.3 | Enemies split done (EnemySimulation + EnemyManager); progress list; open questions updated. |
 | 2026-11-22 | v0.2 | Decided: core/shell split of the simulation managers on Godot types (step 1); no .NET math types in game code (step 2 rejected). Worked example, benefits, order and allocation notes. |
 | 2026-11-22 | v0.1 | Split out of the single multiplayer-architecture.md (v0.3); content unchanged. |

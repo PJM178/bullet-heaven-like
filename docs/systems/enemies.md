@@ -68,6 +68,9 @@ and are pushed out of walls after each move.
   step (`PushSettings`), so changing them while running still works. Crowd
   settings are shared by all kinds: `SeparationRadius` 0.6 m,
   `SeparationStrength` 6, `StopDistance` 0.7 m, `ArriveSlowdown` 1.
+- Other cores reach the enemies through `IEnemyTargets` (`QueryCircle`,
+  `GetId`, `Damage`), which `EnemyManager` implements (used by
+  `ProjectileSimulation`).
 - Walls: the core gets `WorldObstacles` as `IObstacleQuery` (`PushOut`,
   `IsLineBlocked`), so it never depends on the node.
 - Randomness: the core takes a `Random` (default `Random.Shared`); a seeded
