@@ -1,6 +1,6 @@
 # Docs
 
-Two kinds of doc, kept apart:
+Three kinds of doc, kept apart:
 
 - **`design/`**: plans and decisions. What we intend to build and why:
   proposals, choices made, open questions. Like ADRs, they keep the
@@ -10,6 +10,10 @@ Two kinds of doc, kept apart:
   Code-level detail (classes, methods, files, values) lives only here;
   design docs talk about gameplay and link to their systems doc. Code
   changes planned for a decided design go under Planned changes.
+- **`research/`**: technical exploration and learning before anything is
+  designed or decided (options, trade-offs, spikes). May name code; turns
+  into design/systems docs once decisions are made. A big topic gets a
+  folder: a README.md overview plus one doc per subtopic.
 
 One doc per self-contained piece of the game (weapons, enemies, progression,
 ...), never one big doc. Each has a status line, open questions and a
@@ -43,3 +47,7 @@ index is loaded into every session.
 - [enemies.md](systems/enemies.md): EnemyDefinition, kinds, per-kind pools, spawning, weapon queries
 - [skills.md](systems/skills.md): SkillDefinition, SkillManager; planned code changes for the weapon plan
 - [meta-progression.md](systems/meta-progression.md): title/upgrade menus, Profile save, upgrades, coins banked on death
+
+## Research
+
+- [multiplayer-architecture/](research/multiplayer-architecture/README.md): online co-op tech, one doc per topic (game server, networking, backend, stack...)
