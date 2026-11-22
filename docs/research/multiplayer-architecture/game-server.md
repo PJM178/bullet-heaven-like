@@ -1,6 +1,6 @@
 # Game Server
 
-Status: v0.2, 2026-11-22. **Exploration**, part of the [multiplayer
+Status: v0.3, 2026-11-22. **Exploration**, part of the [multiplayer
 architecture research](README.md). The process that simulates one run: how
 it is built, how many run, tick rates, and who is authoritative over what.
 
@@ -71,6 +71,7 @@ it has. Visual-only code must not run (or must be cheap no-ops) on the server.
 
 | Thing | Authority | How clients see it |
 | --- | --- | --- |
+| 2026-11-22 | v0.3 | Proposed: run state vs persistent state; game server reports gains to the backend in checkpoints. |
 | Own player movement | **Own client** (relaxed trust, proposed); server + prediction only if needed later | Own player: instant. Host checks speed. |
 | Other players | Their own clients, relayed by the host | Interpolated |
 | Enemies (position, HP, death) | Server | Snapshots; interpolated or extrapolated |
@@ -81,6 +82,35 @@ it has. Visual-only code must not run (or must be cheap no-ops) on the server.
 | Level-up choices | Server validates | Client picks from the server's offered list |
 | Run rewards (coins) | Host decides each player's share | Each client banks its own (relaxed trust); a dedicated server may report to the backend instead |
 | Visual-only (animation frames, effects, camera, cutaways) | Each client | Not networked |
+
+## Run state and persistence (proposal)
+
+A game server's memory lives only as long as its run. Two kinds of state:
+
+| | Run state | Persistent state |
+| --- | --- | --- |
+| Examples | Enemy positions, HP, run XP and level, what a player carries right now | Account, coins, upgrades, stored materials, unlocked maps |
+| Lives in | Game server memory | Backend database |
+| Lifetime | Ends with the run | Kept |
+
+Example: a player mines an ore. The game server changes run state and tells
+the player's phone at once (over the transport). The ore only becomes
+persistent when the game server reports it to the backend: the game server
+is the witness, the backend the record keeper.
+
+When to report:
+
+| When | Pro | Con |
+| --- | --- | --- |
+| Once, at run end | Simplest | A crash loses the whole run's gains |
+| Every event | Nothing lost | Many calls, backend busy during play |
+| **Checkpoints** (proposed): a batch every 30-60 s, when a player leaves, and at run end | Little lost on a crash, few calls | Some bookkeeping |
+
+The game server keeps a list of unreported gains per player and sends it in
+batches; the backend applies each batch once (idempotent reports, see
+[backend.md](backend.md)). How much is at stake depends on the design
+question of *when* a gain becomes the player's (see the README's Handed to
+design): if a bag is only kept on surviving, the run-end report is enough.
 
 ## Open questions
 

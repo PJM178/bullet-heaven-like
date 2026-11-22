@@ -1,13 +1,16 @@
 # Networking and Replication
 
-Status: v0.1, 2026-11-22. **Exploration only**, part of the [multiplayer
+Status: v0.2, 2026-11-22. **Exploration only**, part of the [multiplayer
 architecture research](README.md). How state gets from the game server to
 the phones: transport, the enemy horde, projectiles, joining and leaving.
 
 ## Transport
 
-- **ENet over UDP** (`ENetMultiplayerPeer`), built into Godot. Has reliable
-  and unreliable channels. Proposed.
+- **Our own reliable-UDP transport** (decided 2026-11-22): written from
+  scratch as a separate learning project, used by the game. See
+  [learning/reliable-udp](../../learning/reliable-udp/README.md).
+- **ENet over UDP** (`ENetMultiplayerPeer` / `ENetConnection`), built into
+  Godot: the reference and fallback behind the same interface.
 - WebSocket / WebRTC peers exist in Godot too; not needed (no web export for C#
   anyway).
 - Steam / platform relays: not relevant for Android-first.
@@ -64,12 +67,14 @@ data-driven `ProjectileDefinition` system.
 
 - [ ] Is extrapolating enemies on the client good enough, given separation
       pushes and walls?
-- [ ] Byte-array RPC or raw `PutPacket` for snapshots?
-- [ ] Does C# on Android (experimental in Godot 4.7) behave with ENet? Test
-      early on the phone.
+- [x] Byte-array RPC or raw `PutPacket` for snapshots? Neither: snapshots
+      go through our own transport ([learning/reliable-udp](../../learning/reliable-udp/README.md)).
+- [ ] Does C# on Android (experimental in Godot 4.7) behave with .NET
+      sockets (our transport) and ENet (fallback)? Test early on the phone.
 
 ## Changelog
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.2 | Transport: own reliable UDP decided (learning/reliable-udp), ENet as fallback. |
 | 2026-11-22 | v0.1 | Split out of the single multiplayer-architecture.md (v0.3); content unchanged. |

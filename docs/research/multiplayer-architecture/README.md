@@ -1,6 +1,6 @@
 # Multiplayer Architecture (research)
 
-Status: v0.6, 2026-11-22. **Exploration**, nothing built. These docs are a
+Status: v0.7, 2026-11-22. **Exploration**, nothing built. These docs are a
 learning and research notebook for the technical side of online co-op: how
 the servers, networking and replication could work. Choices made are marked
 **Decided** (with a date); everything else is a proposal, an option or an
@@ -17,6 +17,7 @@ open question. This page is the overview; each topic has its own doc below.
 | 2026-11-22 | One host is authoritative for a run; the host is a dedicated server **or** a player's phone (same code). Trust is relaxed: no anti-cheat for now | [game-server.md](game-server.md) |
 | 2026-11-22 | Own backend, one ASP.NET Core app; starts as little more than accounts | [backend.md](backend.md) |
 | 2026-11-22 | Local setup runs in Docker (Compose), the same way it will be deployed | [deployment.md](deployment.md) |
+| 2026-11-22 | Own reliable-UDP transport (learning goal, used by the game); ENet as fallback; a separate learning project | [learning/reliable-udp](../../learning/reliable-udp/README.md) |
 
 Gameplay questions (shared progress, mixed meta levels, world unlocking...)
 are only *collected* here, under [Handed to design](#handed-to-design). They
@@ -108,8 +109,12 @@ Details: [game-server.md](game-server.md), [backend.md](backend.md),
 
 Each step is small, runs locally, and teaches one idea:
 
-1. **Hello ENet**: a headless server and two desktop clients connect; clients
-   see each other's player (naive: client sends position). Learn: peers, RPCs.
+0. **Own transport** (added 2026-11-22): reliable UDP from scratch, tested
+   on a simulated bad network. Learn: what TCP/QUIC do underneath. Its own
+   learning project: [learning/reliable-udp](../../learning/reliable-udp/README.md).
+1. **Hello network**: a headless server and two desktop clients connect over
+   our transport; clients see each other's player (client sends position).
+   Learn: peers, messages.
 2. **Server authority**: clients send input commands; server moves players.
    Feel the input lag. Learn: ticks, input commands.
 3. **Prediction + reconciliation** for own player; interpolation for others.
@@ -143,6 +148,10 @@ Collected for a future `design/multiplayer.md`; not answered here.
 - **Base / menu**: is the (later walkable) base shared with the party?
 - **Enemy count**: scale with player count, or with how spread out players
   are?
+- **When does a gain become yours?** Ore, materials, coins picked up in a
+  run: kept at once, at run end, or only if you survive/extract? Decides how
+  often game servers must report to the backend (game-server.md, Run state
+  and persistence). Relates to design/smithing.md (materials beside coins).
 
 ## Open questions
 
@@ -152,6 +161,7 @@ Topic questions live in each doc's own Open questions section.
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.7 | Decided: own reliable-UDP transport (learning project in docs/learning/reliable-udp/). |
 | 2026-11-22 | v0.6 | Decided: core/shell split on Godot types; no .NET math types in game code. |
 | 2026-11-22 | v0.5 | First decisions: C#, monorepo, plain-C# backend and shared code, two host modes (phone or dedicated) with relaxed trust, own one-app backend, Docker locally. Decided table added. |
 | 2026-11-22 | v0.4 | Split into a folder: this overview plus one doc per topic. |

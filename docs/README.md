@@ -1,6 +1,6 @@
 # Docs
 
-Three kinds of doc, kept apart:
+Four kinds of doc, kept apart:
 
 - **`design/`**: plans and decisions. What we intend to build and why:
   proposals, choices made, open questions. Like ADRs, they keep the
@@ -14,6 +14,10 @@ Three kinds of doc, kept apart:
   designed or decided (options, trade-offs, spikes). May name code; turns
   into design/systems docs once decisions are made. A big topic gets a
   folder: a README.md overview plus one doc per subtopic.
+- **`learning/`**: learning projects: building something step by step to
+  understand how it works underneath. One folder per project: a README.md
+  (why, steps with status) plus one doc per step (learn, build, test,
+  findings). The outcome may become part of the game.
 
 Code paths in docs (`enemies/EnemyManager.cs`, ...) are relative to `game/`,
 the Godot project; server-side paths (`backend/...`, `deploy/...`) are
@@ -52,6 +56,10 @@ index is loaded into every session.
 - [skills.md](systems/skills.md): SkillDefinition, SkillManager; planned code changes for the weapon plan
 - [meta-progression.md](systems/meta-progression.md): title/upgrade menus, Profile save, upgrades, coins banked on death
 - [backend.md](systems/backend.md): ASP.NET backend shell, shared library, root solution, Docker, Makefile
+
+## Learning
+
+- [reliable-udp/](learning/reliable-udp/README.md): own network transport over UDP from scratch, 11 steps, each tied to web protocols
 
 ## Research
 
