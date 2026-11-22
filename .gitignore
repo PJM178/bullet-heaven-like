@@ -17,3 +17,9 @@
 # but they stay out of the repo (see CLAUDE.local.md).
 /game/local_assets/
 CLAUDE.local.md
+
+# .NET build output of the server-side projects (the game's goes to .godot/)
+/shared/**/bin/
+/shared/**/obj/
+/backend/**/bin/
+/backend/**/obj/

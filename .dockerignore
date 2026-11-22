@@ -1,0 +1,8 @@
+# Keep the Docker build context small: the backend image needs only
+# backend/ and shared/ (see deploy/Dockerfile).
+**/bin/
+**/obj/
+.git/
+game/
+art/
+docs/

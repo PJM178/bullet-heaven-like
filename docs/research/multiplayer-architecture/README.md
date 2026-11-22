@@ -30,6 +30,7 @@ multiplayer as a game designer.
 | [glossary.md](glossary.md) | Networking terms: authority, ticks, snapshots, prediction, interpolation... |
 | [game-server.md](game-server.md) | Headless Godot game server, process per run, tick rates, authority table |
 | [networking.md](networking.md) | ENet transport, replicating the horde, bandwidth budget, projectiles, joining/leaving |
+| [backend-shell-plan.md](backend-shell-plan.md) | First backend step (built): empty ASP.NET shell, shared library, root solution, Docker |
 | [backend.md](backend.md) | Accounts, profiles, parties, sessions, results; trust model; build or buy |
 | [deployment.md](deployment.md) | Running everything locally first, Docker and hosting later |
 | [stack.md](stack.md) | Language (C#), repo layout (monorepo), plain C# backend and shared code |

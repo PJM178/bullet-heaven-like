@@ -1,6 +1,6 @@
 # Language and Repo Layout
 
-Status: v0.4, 2026-11-22. **Exploration**, part of the [multiplayer
+Status: v0.5, 2026-11-22. **Exploration**, part of the [multiplayer
 architecture research](README.md). Which language each server is written in,
 and where the projects live in the repo.
 
@@ -76,9 +76,11 @@ Details that come with B:
   Godot to build.
 
 Done 2026-11-22: the Godot project moved into `game/` (`docs/` and `art/`
-stay at the root). `shared/`, `backend/` and `deploy/` are added when the
-first server code is written. Godot keeps its own `game/BulletHeavenLike.sln`;
-a root solution for all projects comes with the backend.
+stay at the root). Then the backend shell added `shared/`, `backend/`,
+`deploy/` and a root `BulletHeavenLike.slnx` (not `.sln`) for all projects;
+Godot keeps its own `game/BulletHeavenLike.sln`. The game doesn't reference
+`shared/` until the first shared type exists. As built:
+[systems/backend.md](../../systems/backend.md).
 
 ## Backend and shared code: plain C# (decided 2026-11-22)
 
@@ -133,6 +135,7 @@ the simulation can stay in Godot. See [networking.md](networking.md).
 
 | Date | Version | Change |
 | --- | --- | --- |
+| 2026-11-22 | v0.5 | Layout in use: `shared/`, `backend/`, `deploy/`, root `.slnx`. |
 | 2026-11-22 | v0.4 | Repo move done: Godot project in `game/`. |
 | 2026-11-22 | v0.3 | Decided: game code stays on Godot types; core/shell split instead. Shared message vectors: plain floats proposed. |
 | 2026-11-22 | v0.2 | Decided: C# everywhere, monorepo (for now), backend and shared library plain C# (no Godot). Game simulation off Godot types: not worth it (checked against the code). |

@@ -9,9 +9,9 @@ level-up upgrades). **Android is the first target platform.**
   `~/Applications/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64`
 - **Repo layout**: a monorepo. The Godot project is `game/` (its root is
   `game/project.godot`; all `res://` paths are relative to it). `docs/` and
-  `art/` sit beside it at the repo root. Server projects (`shared/`,
-  `backend/`, `deploy/`) will join them; see
-  `docs/research/multiplayer-architecture/stack.md`.
+  `art/` sit beside it at the repo root, with the server side: `backend/`
+  (ASP.NET Core, net10.0), `shared/` (plain C# library, net8.0, never
+  references Godot) and `deploy/` (Docker). See `docs/systems/backend.md`.
 - **C# / .NET**: .NET SDK 10 is installed. `game/BulletHeavenLike.csproj` targets
   `net8.0` (and `net9.0` for Android, which Godot requires).
 - Assembly and root namespace: `BulletHeavenLike`.
@@ -34,13 +34,24 @@ dotnet build                                            # compile C# (fast check
 `--build-solutions` prints a harmless `EditorSettings not instantiated` error
 about `shutdown_adb_on_exit`; ignore it.
 
+Server side, from the repo root:
+
+```bash
+dotnet build      # BulletHeavenLike.slnx: backend, shared and game
+make run          # backend in Docker on :8080, logs on screen (make up/down/logs/health)
+```
+
+Godot keeps its own `game/BulletHeavenLike.sln`; the root `.slnx` is for
+`dotnet` only.
+
 Running the game and deploying to the phone happen from the Godot editor
 (F5 / the Android one-click deploy icon). Close the Godot editor before
 renaming or moving project files from outside it.
 
 ## Folder layout
 
-Repo root: `game/` (the Godot project), `docs/`, `art/`, `.claude/`.
+Repo root: `game/` (the Godot project), `backend/`, `shared/`, `deploy/`,
+`docs/`, `art/`, `.claude/`, plus `BulletHeavenLike.slnx` and `Makefile`.
 Inside `game/`, files are grouped by **feature**, not by type: a script
 lives next to the scenes, models, shaders and materials it belongs to.
 
@@ -75,6 +86,9 @@ local_assets/          local sprites/effects/models used in-game (git-ignored, b
 research/              local experiments and tests (git-excluded)
 
 (repo root)
+backend/BulletHeavenLike.Backend/   ASP.NET Core backend (namespace BulletHeavenLike.Backend)
+shared/BulletHeavenLike.Shared/     plain C# shared by game and servers (BulletHeavenLike.Shared)
+deploy/                Dockerfile, docker-compose.yml (build context = repo root)
 art/                   Blender sources and generator scripts
 docs/                  design/ (plans, decisions), systems/ (as built),
                        research/ (exploration); indexed in docs/README.md.
@@ -82,8 +96,9 @@ docs/                  design/ (plans, decisions), systems/ (as built),
 ```
 
 A new weapon gets its own folder under `weapons/`; code shared by several
-weapons goes in `weapons/` itself. All C# stays in the single
-`BulletHeavenLike` namespace regardless of folder.
+weapons goes in `weapons/` itself. All game C# stays in the single
+`BulletHeavenLike` namespace regardless of folder (the server projects use
+their own, above).
 
 Move or rename files with the Godot editor's FileSystem dock, which updates
 references. From outside the editor (editor closed), `git mv` the file

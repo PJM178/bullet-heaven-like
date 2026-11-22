@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/BulletHeavenLike.Backend/BulletHeavenLike.Backend.csproj" />
+  </Folder>
+  <Folder Name="/game/">
+    <Project Path="game/BulletHeavenLike.csproj" />
+  </Folder>
+  <Folder Name="/shared/">
+    <Project Path="shared/BulletHeavenLike.Shared/BulletHeavenLike.Shared.csproj" />
+  </Folder>
+</Solution>

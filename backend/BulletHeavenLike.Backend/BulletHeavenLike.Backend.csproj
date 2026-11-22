@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The backend: ASP.NET Core (accounts, profiles, parties, sessions and the
+    orchestrator that starts game servers, added step by step). Plain .NET,
+    never references Godot. .NET 10 is the current LTS.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BulletHeavenLike.Backend</RootNamespace>
+  </PropertyGroup>
+
+</Project>

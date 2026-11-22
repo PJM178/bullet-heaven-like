@@ -16,7 +16,8 @@ Three kinds of doc, kept apart:
   folder: a README.md overview plus one doc per subtopic.
 
 Code paths in docs (`enemies/EnemyManager.cs`, ...) are relative to `game/`,
-the Godot project.
+the Godot project; server-side paths (`backend/...`, `deploy/...`) are
+relative to the repo root.
 
 One doc per self-contained piece of the game (weapons, enemies, progression,
 ...), never one big doc. Each has a status line, open questions and a
@@ -50,6 +51,7 @@ index is loaded into every session.
 - [enemies.md](systems/enemies.md): EnemyDefinition, kinds, per-kind pools, spawning, weapon queries
 - [skills.md](systems/skills.md): SkillDefinition, SkillManager; planned code changes for the weapon plan
 - [meta-progression.md](systems/meta-progression.md): title/upgrade menus, Profile save, upgrades, coins banked on death
+- [backend.md](systems/backend.md): ASP.NET backend shell, shared library, root solution, Docker, Makefile
 
 ## Research
 

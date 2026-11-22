@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Plain C# code shared by the game, the game server and the backend
+    (message contracts, rules both sides check). Never reference Godot here:
+    the backend builds without Godot.
+
+    net8.0 so the game (net8.0 on desktop, net9.0 on Android) can reference it;
+    a newer target would be unusable from the game.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BulletHeavenLike.Shared</RootNamespace>
+  </PropertyGroup>
+
+</Project>

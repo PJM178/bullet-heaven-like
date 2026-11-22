@@ -1,0 +1,18 @@
+# Runs the backend locally in Docker:
+#   cd deploy && docker compose up --build
+# then: curl http://localhost:8080/health
+# (from the phone on the same Wi-Fi: http://<this machine's LAN IP>:8080/health)
+
+# Project name: containers become bulletheavenlike-backend-1 instead of
+# taking the folder name (deploy-backend-1).
+name: bulletheavenlike
+
+services:
+  backend:
+    build:
+      context: ..                # repo root: the image needs backend/ and shared/
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"              # host:container
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
